@@ -1,6 +1,7 @@
 # gtool
 
-A branch for gtool
+Please note that the code in this repository is only a branch of <https://www.gfd-dennou.org/library/gtool/gtool5.htm.ja>.
+
 I had to make some modifications to the Makefile in order to make this package still buildable in 2023.
 
 gtool5 -- Gtool5 Fortran 90/95 Library
@@ -117,10 +118,10 @@ This package is consist of following files and directories.
 = Contact
 
 このパッケージに対するコメント, 提案, バグレポートは
-<dcstaff_at_gfd-dennou.org> ("_at_" は "@" に置き換えてください)
+<dcstaff_at_gfd-dennou.org> ("*at*" は "@" に置き換えてください)
 までお寄せください. その際には, VERSION ファイルに記載される
 バージョン情報も付記ください.
 
 Please send comments, suggestions, and bug reports to
-<dcstaff_at_gfd-dennou.org> (Please replace "_at_" with "@").
+<dcstaff_at_gfd-dennou.org> (Please replace "*at*" with "@").
 Please identify the version of the package (file VERSION).

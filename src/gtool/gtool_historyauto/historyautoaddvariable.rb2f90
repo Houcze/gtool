@@ -1,0 +1,969 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+require("optparse")
+#
+# "historyautoaddvariable.f90" Generator with Ruby.
+#
+opt = OptionParser.new
+opt.on('--histput_dim=VAL') {|v| $histput_dim = v.to_i}
+opt.parse!(ARGV)
+$histput_dim = 7 unless $histput_dim
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= 変数登録
+!= Registration of variables
+!
+! Authors::   Yasuhiro MORIKAWA
+! Version::   $Id: historyautoaddvariable.rb2f90,v 1.5 2009-10-29 11:06:28 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2008-2009. All rights reserved.
+! License::   See COPYRIGHT[link:../../../COPYRIGHT]
+!
+  subroutine HistoryAutoAddVariable1( &
+    & varname, dims, longname, units, &       ! (in)
+    & xtype, time_units, time_average, &      ! (in) optional
+    & file, &                                 ! (in) optional
+    & origin, terminus, interval, &           ! (in) optional
+    & slice_start, slice_end, slice_stride, & ! (in) optional
+    & space_average, &                        ! (in) optional
+    & newfile_interval &                      ! (in) optional
+    & )
+    !
+    ! データ出力するための変数登録を行います.
+    !
+    ! HistoryAutoAllVarFix を呼ぶ前にこのサブルーチンを使用してください.
+    !
+    ! * 時間平均について
+    !
+    !   gtool_historyauto を用いた出力では,
+    !   以下のいづれかの条件を満たす場合に出力データを
+    !   時間方向に平均化して出力します.
+    !
+    !   1. HistoryAutoCreate の引数 *namelist_filename* に
+    !      指定された NAMELIST ファイル内において
+    !      NAMELIST 変数群 "NAMELIST#gtool_historyauto_nml" 内の
+    !      変数の一つである 論理型変数 TimeAverage に .true. が
+    !      与えられている.
+    !
+    !   2. HistoryAutoAddVariable の引数 *time_average* に
+    !      .true. を与えている.
+    !
+    !   3. HistoryAutoCreate の引数 *time_average* に
+    !      .true. を与えている.
+    !
+    !   時間平均を行わない場合には, HistoryAutoPut の引数
+    !   *time* に与えられた時刻と出力のタイミングが合致しない場合,
+    !   HistoryAutoPut の *value* もしくは *array* に与えられた値は
+    !   全て破棄されます. 一方で上記の条件を満たす場合には,
+    !   本来破棄されていた値を gtool_historyauto モジュール内部
+    !   にいったん保管し, それらを出力のタイミングで平均化して
+    !   出力します. 平均化は出力時から次の出力時の間の
+    !   データを用いて行われます. 時間間隔が一定でない場合、
+    !   重み付けをして出力されます. 重み付けは以下のように
+    !   行われます.
+    !
+    !     sum( <data> * <weight> ) / sum ( <weight> )
+    !
+    !   <data>   :: *array* または *value* に与えられたデータ
+    !   <weight> :: 前回 HistoryAutoPut が呼ばれた際の時刻と今回の時刻との差
+    !   sum      :: 前回出力が行われた時刻から *interval* 経過するまでの値の和
+    !
+    !
+    ! Register variables for history data output
+    !
+    ! Use this subroutine before "HistoryAutoAllVarFix" is called.
+    !
+
+    ! モジュール引用 ; USE statements
+    !
+
+    use gtool_historyauto_internal, only: initialized, version, numdims, &
+      & MAX_DIMS_DEPENDED_BY_VAR, MAX_VARS, &
+      & numvars, numwgts, &
+      & gthst_axes, gthst_vars, gthst_weights, gthstnml, &
+      & all_output_save, flag_allvarfixed, wgtsuf, time_unit_bycreate, &
+      & interval_time_vars, interval_unitsym_vars, &
+      & newfile_inttime_vars, origin_time_vars, &
+      & output_valid_vars, tavr_vars, terminus_time_vars, varname_vars, &
+      & space_avr_vars, slice_vars, weight_vars, data_weights, &
+      & gthst_history_vars, cal_save
+    use gtool_history_nmlinfo_generic, only: HstNmlInfoSetValidName, &
+      & HstNmlInfoDefineMode, HstNmlInfoReDefine, HstNmlInfoEndDefine, &
+      & HstNmlInfoAdd, HstNmlInfoInquire, HstNmlInfoOutputValid, &
+      & HstNmlInfoAssocGtHist
+    use gtool_history, only: HistoryVarinfoCreate, HistoryVarinfoInquire, &
+      & HistoryAxisInquire
+    use dc_trace, only: BeginSub, EndSub
+    use dc_error, only: StoreError, DC_NOERR, HST_EVARINUSE, &
+      & HST_EALREADYREGVARFIX, DC_ENOTINIT, HST_EMAXDIMSDEPENDED, &
+      & HST_EINDIVISIBLE
+    use dc_message, only: MessageNotify
+    use dc_string, only: StrInclude, JoinChar, toChar
+    use dc_calendar, only: DCCalConvertByUnit, DCCalParseUnit
+    use dc_date, only: DCDiffTimeCreate, operator(/), mod, EvalSec, &
+      & operator(-), EvalbyUnit
+    use dc_date_types, only: DC_DIFFTIME, DC_DATETIME
+    use netcdf, only: NF90_EMAXVARS, NF90_MAX_DIMS
+    use dc_types, only: DP, STRING, TOKEN
+
+    ! 宣言文 ; Declaration statements
+    !
+    implicit none
+    character(*), intent(in):: varname
+                              ! 変数名. Variable name
+    character(*), intent(in):: dims(:)
+                              ! 変数が依存する次元の名前.
+                              ! 時間の次元は配列の最後に指定すること.
+                              !
+                              ! Names of dependency dimensions of a variable.
+                              ! Dimension of time must be specified
+                              ! to last of an array.
+    character(*), intent(in):: longname
+                              ! 変数の記述的名称.
+                              !
+                              ! Descriptive name of a variable
+    character(*), intent(in):: units
+                              ! 変数の単位.
+                              !
+                              ! Units of a variable
+    character(*), intent(in), optional:: xtype
+                              !
+                              ! 変数のデータ型
+                              !
+                              ! デフォルトは float (単精度実数型) であ
+                              ! る. 有効なのは, double (倍精度実数型),
+                              ! int (整数型) である. 指定しない 場合や,
+                              ! 無効な型を指定した場合には, float (単
+                              ! 精度実数型) となる.
+                              !
+                              ! Data types of dimensions specified
+                              ! with "dims".
+                              !
+                              ! Default value is "float" (single precision).
+                              ! Other valid values are
+                              ! "double" (double precision),
+                              ! "int" (integer).
+                              ! If no value or invalid value is specified,
+                              ! "float" is applied.
+                              !
+    character(*), intent(in), optional:: time_units
+                              ! 時刻次元の単位.
+                              ! Units of time dimension.
+    logical, intent(in), optional:: time_average
+                              !
+                              ! 出力データを時間平均する場合には
+                              ! .true. を与えます. デフォルトは
+                              ! .false. です.
+                              !
+                              ! If output data is averaged, specify
+                              ! ".true.". Default is ".false.".
+                              !
+    character(*), intent(in), optional:: file
+                              ! 出力ファイル名.
+                              ! Output file name.
+
+    real(DP), intent(in), optional:: origin
+                              ! 出力開始時刻.
+                              !
+                              ! 省略した場合, 自動的に 0.0 [sec] が
+                              ! 設定されます.
+                              !
+                              ! Start time of output.
+                              !
+                              ! If this argument is omitted,
+                              ! 0.0 [sec] is specified
+                              ! automatically.
+                              !
+    real(DP), intent(in), optional:: terminus
+                              ! 出力終了時刻.
+                              !
+                              ! 省略した場合, 数値モデルの実行が終了するまで
+                              ! 出力を行います.
+                              !
+                              ! End time of output.
+                              !
+                              ! If this argument is omitted,
+                              ! output is continued until a numerical model
+                              ! is finished.
+                              !
+    real(DP), intent(in), optional:: interval
+                              ! 出力時間間隔.
+                              !
+                              ! 省略した場合,
+                              ! 自動的に 1.0 [sec] が設定されます.
+                              !
+                              ! Interval of output time.
+                              !
+                              ! If this argument is omitted,
+                              ! a value of 1.0 [sec] is specified
+                              ! automatically.
+                              !
+    integer, intent(in), optional:: slice_start(:)
+                              ! 空間方向の開始点.
+                              !
+                              ! 省略した場合, 座標データの開始点が設定されます.
+                              !
+                              ! Start points of spaces.
+                              !
+                              ! If this argument is omitted,
+                              ! start points of dimensions are set.
+                              !
+    integer, intent(in), optional:: slice_end(:)
+                              ! 空間方向の終了点.
+                              !
+                              ! 省略した場合, 座標データの終了点が設定されます.
+                              !
+                              ! End points of spaces.
+                              !
+                              ! If this argument is omitted,
+                              ! End points of dimensions are set.
+                              !
+    integer, intent(in), optional:: slice_stride(:)
+                              ! 空間方向の刻み幅.
+                              !
+                              ! 省略した場合, 1 が設定されます.
+                              !
+                              ! Strides of spaces
+                              !
+                              ! If this argument is omitted,
+                              ! 1 is set.
+                              !
+    logical, intent(in), optional:: space_average(:)
+                              ! 平均化のフラグ.
+                              !
+                              ! .true. が指定される座標に対して平均化を
+                              ! 行います.
+                              ! 省略した場合, .false. が設定されます.
+                              !
+                              ! Flag of average.
+                              !
+                              ! Axes specified .true. are averaged.
+                              ! If this argument is omitted,
+                              ! .false. is set.
+                              !
+    integer, intent(in), optional:: newfile_interval
+                              ! ファイル分割時間間隔.
+                              !
+                              ! 省略した場合,
+                              ! 時間方向へのファイル分割を行いません.
+                              !
+                              ! Interval of time of separation of a file.
+                              !
+                              ! If this argument is omitted,
+                              ! a files is not separated in time direction.
+                              !
+
+    ! 作業変数
+    ! Work variables
+    !
+    character(TOKEN):: interval_unit_work
+                              ! データの出力間隔の単位.
+                              ! Unit for interval of history data output
+    character(TOKEN):: origin_unit_work
+                              ! 出力開始時刻の単位.
+                              ! Unit of start time of output.
+    character(TOKEN):: terminus_unit_work
+                              ! 出力終了時刻の単位.
+                              ! Unit of end time of output.
+    character(TOKEN):: newfile_intunit_work
+                              ! ファイル分割時間間隔の単位.
+                              ! Unit of interval of time of separation of a file.
+
+    real(DP):: interval_value
+                              ! データの出力間隔の数値.
+                              ! Numerical value for interval of history data output
+    real(DP):: origin_value
+                              ! データの出力開始時刻の数値.
+                              ! Numerical value for start time of history data output
+    real(DP):: terminus_value
+                              ! 出力終了時刻の数値.
+                              ! Numerical value for end time of output.
+    integer:: newfile_intvalue
+                              ! ファイル分割時間間隔.
+                              ! Interval of time of separation of a file.
+    character(TOKEN):: time_name
+                              ! 時刻次元の名称.
+                              ! Name of time dimension
+    character(STRING), allocatable:: dims_work(:)
+                              ! 変数が依存する次元の名前.
+                              ! Names of dependency dimensions of a variable.
+    character(TOKEN):: precision
+                              ! データの精度.
+                              ! Precision of history data
+    logical:: time_average_work
+                              ! 出力データの時間平均フラグ.
+                              ! Flag for time average of output data
+    logical:: space_average_work(1:numdims-1)
+    integer:: slice_start_work(1:numdims-1)
+                              ! 空間方向の開始点.
+                              ! Start points of spaces.
+    integer:: slice_end_work(1:numdims-1)
+                              ! 空間方向の終了点.
+                              ! End points of spaces.
+    integer:: slice_stride_work(1:numdims-1)
+                              ! 空間方向の刻み幅.
+                              ! Strides of spaces
+
+    logical:: define_mode, varname_not_found
+    integer:: cause_i, stat, i, j, k, cnt, cnt2, dim_size
+    character(TOKEN), pointer:: dims_noavr(:) =>null(), dims_avr(:) =>null()
+    character(STRING):: longname_avrmsg
+    character(STRING):: name, cause_c
+    character(*), parameter:: subname = "HistoryAutoAddVariable1"
+  continue
+    call BeginSub(subname, 'varname=%c', c1 = trim(varname), version = version)
+    stat = DC_NOERR
+    cause_c = ""
+    cause_i = 0
+
+    ! 初期設定チェック
+    ! Check initialization
+    !
+    if ( .not. initialized ) then
+      stat = DC_ENOTINIT
+      cause_c = 'gtool_historyauto'
+      goto 999
+    end if
+
+    ! 既に HistoryAutoAllVarFix が呼ばれていたらエラー
+    ! Error is occurred if "HistoryAutoAllVarFix" is called already
+    !
+    if ( flag_allvarfixed ) then
+      call MessageNotify( 'W', subname, &
+        & '"HistoryAutoAddVariable" (varname = %c) must be called before "HistoryAutoAllVarFix"', &
+        & c1 = trim(varname) )
+      stat = HST_EALREADYREGVARFIX
+      cause_c = 'HistoryAutoAllVarFix'
+      goto 999
+    end if
+
+    ! 重複のチェック
+    ! Check duplication
+    !
+    do i = 1, numvars
+      call HistoryVarinfoInquire( &
+        & varinfo = gthst_vars(i), &  ! (in)
+        & name = name )               ! (out)
+      if ( trim(varname) == trim(name) ) then
+        stat = HST_EVARINUSE
+        cause_c = varname
+        goto 999
+      end if
+    end do
+
+    ! 変数の数の限界チェック
+    ! Check limit of number of variables
+    !
+    if ( numvars + 1 > MAX_VARS ) then
+      stat = NF90_EMAXVARS
+      goto 999
+    end if
+
+    ! 時刻の次元に関する修正
+    ! Correction for time dimension
+    !
+    call HistoryAxisInquire( &
+      & axis = gthst_axes(numdims), & ! (in)
+      & name = time_name )            ! (out)
+
+    if ( size(dims) > 0 ) then
+      if ( StrInclude( dims, time_name ) ) then
+        if ( trim( dims(size(dims)) ) == trim( time_name ) ) then
+          allocate( dims_work(size(dims)) )
+          dims_work = dims
+        else
+          allocate( dims_work(size(dims)) )
+          cnt = 1
+          do i = 1, size(dims)
+            if ( trim( dims(i) ) /= trim( time_name ) ) then
+              dims_work( cnt ) = dims( i )
+              cnt = cnt + 1
+            end if
+          end do
+          dims_work(size(dims)) = time_name
+
+          call MessageNotify( 'W', subname, &
+            & 'last entity of "dims=<%c>" must be time dimension (varname=<%c>). ' // &
+            & ' "dims" are resequenced forcibly => <%c>', &
+            & c1 = trim( JoinChar(dims, ',') ), c2 = trim( varname ), &
+            & c3 = trim( JoinChar(dims_work, ',') ) )
+
+        end if
+      else
+        allocate( dims_work(size(dims)+1) )
+        dims_work(1:size(dims)) = dims
+        dims_work(size(dims)+1) = time_name
+        call MessageNotify( 'W', subname, &
+          & 'time dimension is not found in "dims=<%c>" (varname=<%c>). ' // &
+          & ' time dimension "%c" is appended to "dims" forcibly.', &
+          & c1 = trim( JoinChar(dims, ',') ), c2 = trim( varname ), &
+          & c3 = trim( time_name ) )
+      end if
+    else
+      allocate( dims_work(1) )
+      dims_work(1) = time_name
+      call MessageNotify( 'W', subname, &
+        & 'time dimension is not found (varname=<%c>). ' // &
+        & ' time dimension "%c" is appended to "dims" forcibly.', &
+        & c1 = trim( varname ), &
+        & c2 = trim( time_name ) )
+    end if
+
+    ! 依存する次元の数の限界チェック
+    ! Check limit of number of depended dimensions
+    !
+    if ( size( dims_work ) - 1 > MAX_DIMS_DEPENDED_BY_VAR ) then
+      call MessageNotify( 'W', subname, &
+        & 'number of dimensions' // &
+        & ' on which one variable depends must not be greater than %d (varname=<%c>, dims=<%c>). ', &
+        & i = (/ #{$histput_dim} + 1 /), &
+        & c1 = trim( varname ), c2 = trim( JoinChar(dims_work, ',') ) )
+      stat = HST_EMAXDIMSDEPENDED
+      cause_i = size( dims_work )
+      cause_c = varname
+    end if
+
+    ! 全ての変数を出力する際には, ここで登録
+    ! Register here if all variables are output
+    !
+    if ( all_output_save ) then
+      call HstNmlInfoInquire( &
+        & gthstnml = gthstnml, name = varname, &  ! (in)
+        & err = varname_not_found )               ! (out) optional
+      if ( varname_not_found ) then
+        define_mode = HstNmlInfoDefineMode( gthstnml )
+        if ( .not. define_mode ) call HstNmlInfoReDefine( gthstnml ) ! (inout)
+
+        call HstNmlInfoInquire( &
+          & gthstnml = gthstnml, &                   ! (in)
+          & interval_unit   = interval_unit_work, &  ! (out) optional
+          & origin_unit     = origin_unit_work  , &  ! (out) optional
+          & terminus_unit   = terminus_unit_work, &  ! (out) optional
+          & newfile_intunit = newfile_intunit_work ) ! (out) optional
+
+        ! 時刻の単位を設定
+        ! Configure unit of time
+        !
+        if ( present( interval ) ) then
+          interval_unit_work = time_unit_bycreate
+          if ( present(time_units) ) interval_unit_work = time_units
+        end if
+        if ( present( origin ) ) then
+          origin_unit_work   = time_unit_bycreate
+          if ( present(time_units) ) origin_unit_work   = time_units
+        end if
+        if ( present( terminus ) ) then
+          terminus_unit_work = time_unit_bycreate
+          if ( present(time_units) ) terminus_unit_work = time_units
+        end if
+        if ( present( newfile_interval ) ) then
+          newfile_intunit_work = time_unit_bycreate
+          if ( present(time_units) ) newfile_intunit_work = time_units
+        end if
+
+        call HstNmlInfoAdd( &
+          & gthstnml       = gthstnml, &                ! (inout)
+          & name           = varname, &                 ! (in) optional
+          & file           = file, &                    ! (in) optional
+          & precision      = xtype, &                   ! (in) optional
+          & interval_value = interval, &                ! (in) optional
+          & interval_unit  = interval_unit_work, &      ! (in) optional
+          & origin_value   = origin, &                  ! (in) optional
+          & origin_unit    = origin_unit_work, &        ! (in) optional
+          & terminus_value = terminus, &                ! (in) optional
+          & terminus_unit  = terminus_unit_work, &      ! (in) optional
+          & slice_start    = slice_start, &             ! (in) optional
+          & slice_end      = slice_end, &               ! (in) optional
+          & slice_stride   = slice_stride, &            ! (in) optional
+          & time_average   = time_average, &            ! (in) optional
+          & space_average  = space_average, &           ! (in) optional
+          & newfile_intvalue = newfile_interval, &      ! (in) optional
+          & newfile_intunit = newfile_intunit_work )    ! (in) optional
+        if ( .not. define_mode ) call HstNmlInfoEndDefine( gthstnml ) ! (inout)
+      end if
+    end if
+
+    ! 平均化に伴う次元の縮退を反映した変数情報の作り直し
+    ! Remake information of variables that reflects reduction of dimensions
+    !   correspond to average
+    !
+    call HstNmlInfoInquire( &
+      & gthstnml = gthstnml, name = varname, &  ! (in)
+      & precision = precision, &                ! (out) optional
+      & time_average = time_average_work, &     ! (out) optional
+      & space_average = space_average_work, &   ! (out) optional
+      & slice_start = slice_start_work, &       ! (out)
+      & slice_end = slice_end_work, &           ! (out)
+      & slice_stride = slice_stride_work, &     ! (out)
+      & err = varname_not_found )               ! (out) optional
+    if ( varname_not_found ) then
+      call HstNmlInfoInquire( &
+        & gthstnml = gthstnml, name = '', &       ! (in)
+        & precision = precision, &                ! (out) optional
+        & time_average = time_average_work, &     ! (out) optional
+        & space_average = space_average_work, &   ! (out) optional
+        & slice_start = slice_start_work, &       ! (out)
+        & slice_end = slice_end_work, &           ! (out)
+        & slice_stride = slice_stride_work )      ! (out)
+    end if
+
+    if ( .not. associated( space_avr_vars(numvars + 1) % avr ) ) &
+      &          allocate( space_avr_vars(numvars + 1) % avr( size( dims_work ) - 1 ) )
+
+    space_avr_vars(numvars + 1) % avr = .false.
+    do i = 1, size( dims_work ) - 1
+      do j = 1, numdims - 1
+        call HistoryAxisInquire( &
+          & axis = gthst_axes(j), &  ! (in)
+          & name = name )            ! (out)
+        if ( trim(dims_work(i)) == trim(name) ) then
+          space_avr_vars(numvars + 1) % avr( i ) = space_average_work( j )
+          exit
+        end if
+      end do
+    end do
+
+    allocate( dims_noavr ( size(dims_work) - count(space_avr_vars(numvars + 1) % avr) ) )
+    if ( count(space_avr_vars(numvars + 1) % avr) < 1 ) then
+      dims_noavr = dims_work
+      longname_avrmsg = ''
+    else
+      allocate( dims_avr( count(space_avr_vars(numvars + 1) % avr) ) )
+      cnt = 1 ; cnt2 = 1
+      do i = 1, size( dims_work ) - 1
+        if ( .not. space_avr_vars(numvars + 1) % avr(i) ) then
+          dims_noavr( cnt ) = dims_work( i )
+          cnt = cnt + 1
+        else
+          dims_avr( cnt2 ) = dims_work( i )
+          cnt2 = cnt2 + 1
+        end if
+      end do
+      dims_noavr( cnt ) = dims_work( size ( dims_work ) )
+
+      longname_avrmsg = ' averaged in ' // trim( JoinChar( dims_avr, ',' ) ) // '-direction'
+      deallocate( dims_avr )
+    end if
+
+    ! HistoryPut の際のデータの切り出し情報作成
+    ! Create information of slices of data for "HistoryPut"
+    !
+    if ( .not. associated( slice_vars(numvars + 1) % st ) ) &
+      &          allocate( slice_vars(numvars + 1) % st( NF90_MAX_DIMS ) )
+    if ( .not. associated( slice_vars(numvars + 1) % ed ) ) &
+      &          allocate( slice_vars(numvars + 1) % ed( NF90_MAX_DIMS ) )
+    if ( .not. associated( slice_vars(numvars + 1) % sd ) ) &
+      &          allocate( slice_vars(numvars + 1) % sd( NF90_MAX_DIMS ) )
+    slice_vars(numvars + 1) % st = 1
+    slice_vars(numvars + 1) % ed = 1
+    slice_vars(numvars + 1) % sd = 1
+
+    if ( size(dims_work) > 1 ) then
+      slice_subscript_search: do i = 1, size( dims_work ) - 1
+        do j = 1, numdims - 1
+          call HistoryAxisInquire( &
+            & axis = gthst_axes(j), &  ! (in)
+            & name = name, &           ! (out)
+            & size = dim_size )        ! (out)
+          if ( slice_end_work(j) < 1 ) slice_end_work(j) = dim_size
+          if ( trim(dims_work(i)) == trim(name) ) then
+            slice_vars(numvars + 1) % st( i ) = slice_start_work( j )
+            slice_vars(numvars + 1) % ed( i ) = slice_end_work( j )
+            slice_vars(numvars + 1) % sd( i ) = slice_stride_work( j )
+            cycle slice_subscript_search
+          end if
+        end do
+      end do slice_subscript_search
+    end if
+
+
+    ! HistoryPut の際の座標重み情報作成
+    ! Create information of axes weight for "HistoryPut"
+    !
+                    #{forloop("\\$num\\$", 1, $histput_dim, %Q{
+
+    if ( .not. associated( weight_vars(numvars + 1) % wgt$num$      ) ) &
+      &          allocate( weight_vars(numvars + 1) % wgt$num$( 1 ) )
+    weight_vars(numvars + 1) % wgt$num$ = 1.0_DP
+
+    if ( size(dims_work) >= $num$ ) then
+      do j = 1, numdims - 1
+        call HistoryAxisInquire( &
+          & axis = gthst_axes(j), &  ! (in)
+          & name = name, &           ! (out)
+          & size = dim_size )        ! (out)
+        if ( trim(dims_work($num$)) == trim(name) ) then
+          deallocate( weight_vars(numvars + 1) % wgt$num$ )
+          allocate( weight_vars(numvars + 1) % wgt$num$( dim_size ) )
+          weight_vars(numvars + 1) % wgt$num$ = 1.0_DP
+          do k = 1, numwgts
+            call HistoryVarinfoInquire( &
+              & varinfo = gthst_weights(k), &  ! (in)
+              & name    = name )               ! (out)
+            if ( trim(dims_work($num$)) // wgtsuf == trim(name) ) then
+              weight_vars(numvars + 1) % wgt$num$ = data_weights( k ) % a_axis
+              exit
+            end if
+          end do
+          exit
+        end if
+      end do
+    end if
+
+                    })}
+
+    ! 変数名の有効性を設定
+    ! Set validation of the variable name
+    !
+    call HstNmlInfoSetValidName( &
+      & gthstnml = gthstnml, name = varname ) ! (in)
+
+    ! 変数情報の登録
+    ! Register information of variable
+    !
+    call HistoryVarinfoCreate( &
+      & varinfo = gthst_vars(numvars + 1), &              ! (out)
+      & name = varname, dims = dims_noavr, &              ! (in)
+      & longname = trim(longname) // longname_avrmsg , &  ! (in)
+      & units = units, xtype = precision, &               ! (in)
+      & time_average = time_average_work )                ! (in) optional
+    varname_vars(numvars + 1) = varname
+    tavr_vars(numvars + 1) = time_average_work
+    deallocate( dims_noavr )
+    deallocate( dims_work )
+
+    ! 出力の有効かどうかを確認する
+    ! Confirm whether the output is effective
+    !
+    output_valid_vars(numvars + 1) = HstNmlInfoOutputValid( gthstnml, varname )
+
+    ! 出力のタイミングを測るための情報の取得
+    ! Get information for measurement of output timing
+    !
+    if ( output_valid_vars(numvars + 1) ) then
+
+      ! NAMELIST から読み込まれた情報の取得
+      ! Get information loaded from NAMELIST
+      !
+      call HstNmlInfoInquire( &
+        & gthstnml = gthstnml, &                    ! (in)
+        & name = varname, &                         ! (in)
+        & interval_value   = interval_value, &      ! (out)
+        & interval_unit    = interval_unit_work, &  ! (out)
+        & origin_value     = origin_value, &        ! (out)
+        & origin_unit      = origin_unit_work, &    ! (out)
+        & terminus_value   = terminus_value, &      ! (out)
+        & terminus_unit    = terminus_unit_work, &  ! (out)
+        & newfile_intvalue = newfile_intvalue, &    ! (out)
+        & newfile_intunit  = newfile_intunit_work ) ! (out)
+
+      ! 出力間隔ステップ数を算出する.
+      ! Calculate number of step of interval of output
+      !
+      interval_time_vars(numvars + 1) = &
+        & DCCalConvertByUnit( interval_value, interval_unit_work, 'sec', cal_save )
+
+      call DCCalParseUnit( interval_unit_work, & ! (in)
+        & interval_unitsym_vars(numvars + 1) )   ! (out)
+
+!!$      call DCDiffTimeCreate( &
+!!$        & interval_time_vars(numvars + 1), &   ! (out)
+!!$        & interval_value, interval_unit_work ) ! (in)
+
+      ! ファイルを作成するステップ数を算出する.
+      ! Calculate number of step of interval of output
+      !
+      origin_time_vars(numvars + 1) = &
+        & DCCalConvertByUnit( origin_value, origin_unit_work, 'sec', cal_save )
+
+!!$      call DCDiffTimeCreate( &
+!!$        & origin_time_vars(numvars + 1), & ! (out)
+!!$        & origin_value, origin_unit_work ) ! (in)
+
+      ! ファイルをクローズするステップ数を算出する.
+      ! Calculate number of step of closure of file
+      !
+      terminus_time_vars(numvars + 1) = &
+        & DCCalConvertByUnit( terminus_value, terminus_unit_work, 'sec', cal_save )
+
+!!$      call DCDiffTimeCreate( &
+!!$        & terminus_time_vars(numvars + 1), &   ! (out)
+!!$        & terminus_value, terminus_unit_work ) ! (in)
+
+      ! ファイルを新規に作り直すステップ数の算出
+      ! Calculate number of step of remake of file
+      !
+      newfile_inttime_vars(numvars + 1) = &
+        & DCCalConvertByUnit( real( newfile_intvalue, DP ), newfile_intunit_work, 'sec', cal_save )
+
+!!$      call DCDiffTimeCreate( &
+!!$        & newfile_inttime_vars(numvars + 1), &     ! (out)
+!!$        & newfile_intvalue, newfile_intunit_work ) ! (in)
+
+    end if
+
+    ! GT_HISTORY 変数の取得
+    ! Get "GT_HISTORY" variable
+    !
+    if ( output_valid_vars(numvars + 1) ) then
+      define_mode = HstNmlInfoDefineMode( gthstnml )
+      if ( define_mode ) call HstNmlInfoEndDefine( gthstnml ) ! (inout)
+      call HstNmlInfoAssocGtHist( &
+        & gthstnml = gthstnml, name = varname, &               ! (in)
+        & history = gthst_history_vars(numvars + 1) % gthist ) ! (out)
+
+      if ( define_mode ) call HstNmlInfoReDefine( gthstnml ) ! (inout)
+    end if
+
+    ! 登録変数の数を更新
+    ! Update number of registered variables
+    !
+    numvars = numvars + 1
+
+999 continue
+    call StoreError(stat, subname, cause_c = cause_c, cause_i = cause_i)
+    call EndSub(subname, 'stat=%d', i = (/stat/) )
+  end subroutine HistoryAutoAddVariable1
+
+
+  subroutine HistoryAutoAddVariable2( &
+    & varname, dims, longname, units, &       ! (in)
+    & xtype, time_units, time_average, &      ! (in) optional
+    & file, &                                 ! (in) optional
+    & origin, terminus, interval, &           ! (in) optional
+    & slice_start, slice_end, slice_stride, & ! (in) optional
+    & space_average, &                        ! (in) optional
+    & newfile_interval &                      ! (in) optional
+    & )
+    !
+    ! データ出力するための変数登録を行います.
+    !
+    ! HistoryAutoAllVarFix を呼ぶ前にこのサブルーチンを使用してください.
+    !
+    ! Register variables for history data output
+    !
+    ! Use this subroutine before "HistoryAutoAllVarFix" is called.
+    !
+
+    ! モジュール引用 ; USE statements
+    !
+
+    use gtool_historyauto_generic, only: HistoryAutoAddVariable
+    use gtool_historyauto_internal, only: initialized, version, numdims, &
+      & time_unit_bycreate
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_error, only: StoreError, DC_NOERR
+    use dc_date, only: EvalbyUnit
+    use dc_date_types, only: DC_DIFFTIME, DC_DATETIME
+    use dc_types, only: DP, STRING, TOKEN
+
+    ! 宣言文 ; Declaration statements
+    !
+    implicit none
+    character(*), intent(in):: varname
+                              ! 変数名. Variable name
+    character(*), intent(in):: dims(:)
+                              ! 変数が依存する次元の名前.
+                              ! 時間の次元は配列の最後に指定すること.
+                              !
+                              ! Names of dependency dimensions of a variable.
+                              ! Dimension of time must be specified
+                              ! to last of an array.
+    character(*), intent(in):: longname
+                              ! 変数の記述的名称.
+                              !
+                              ! Descriptive name of a variable
+    character(*), intent(in):: units
+                              ! 変数の単位.
+                              !
+                              ! Units of a variable
+    type(DC_DIFFTIME), intent(in):: origin
+                              ! 出力開始時刻.
+                              !
+                              ! Start time of output.
+                              !
+    type(DC_DIFFTIME), intent(in):: terminus
+                              ! 出力終了時刻.
+                              !
+                              ! End time of output.
+                              !
+    type(DC_DIFFTIME), intent(in), optional:: interval
+                              ! 出力時間間隔.
+                              !
+                              ! 省略した場合,
+                              ! 自動的に 1.0 [sec] が設定されます.
+                              !
+                              ! Interval of output time.
+                              !
+                              ! If this argument is omitted,
+                              ! a value of 1.0 [sec] is specified
+                              ! automatically.
+                              !
+    character(*), intent(in), optional:: xtype
+                              !
+                              ! 変数のデータ型
+                              !
+                              ! デフォルトは float (単精度実数型) であ
+                              ! る. 有効なのは, double (倍精度実数型),
+                              ! int (整数型) である. 指定しない 場合や,
+                              ! 無効な型を指定した場合には, float (単
+                              ! 精度実数型) となる.
+                              !
+                              ! Data types of dimensions specified
+                              ! with "dims".
+                              !
+                              ! Default value is "float" (single precision).
+                              ! Other valid values are
+                              ! "double" (double precision),
+                              ! "int" (integer).
+                              ! If no value or invalid value is specified,
+                              ! "float" is applied.
+                              !
+    character(*), intent(in), optional:: time_units
+                              ! 時刻次元の単位.
+                              ! Units of time dimension.
+    logical, intent(in), optional:: time_average
+                              !
+                              ! 出力データを時間平均する場合には
+                              ! .true. を与えます. デフォルトは
+                              ! .false. です.
+                              !
+                              ! If output data is averaged, specify
+                              ! ".true.". Default is ".false.".
+                              !
+    character(*), intent(in), optional:: file
+                              ! 出力ファイル名.
+                              ! Output file name.
+
+    integer, intent(in), optional:: slice_start(:)
+                              ! 空間方向の開始点.
+                              !
+                              ! 省略した場合, 座標データの開始点が設定されます.
+                              !
+                              ! Start points of spaces.
+                              !
+                              ! If this argument is omitted,
+                              ! start points of dimensions are set.
+                              !
+    integer, intent(in), optional:: slice_end(:)
+                              ! 空間方向の終了点.
+                              !
+                              ! 省略した場合, 座標データの終了点が設定されます.
+                              !
+                              ! End points of spaces.
+                              !
+                              ! If this argument is omitted,
+                              ! End points of dimensions are set.
+                              !
+    integer, intent(in), optional:: slice_stride(:)
+                              ! 空間方向の刻み幅.
+                              !
+                              ! 省略した場合, 1 が設定されます.
+                              !
+                              ! Strides of spaces
+                              !
+                              ! If this argument is omitted,
+                              ! 1 is set.
+                              !
+    logical, intent(in), optional:: space_average(:)
+                              ! 平均化のフラグ.
+                              !
+                              ! .true. が指定される座標に対して平均化を
+                              ! 行います.
+                              ! 省略した場合, .false. が設定されます.
+                              !
+                              ! Flag of average.
+                              !
+                              ! Axes specified .true. are averaged.
+                              ! If this argument is omitted,
+                              ! .false. is set.
+                              !
+    integer, intent(in), optional:: newfile_interval
+                              ! ファイル分割時間間隔.
+                              !
+                              ! 省略した場合,
+                              ! 時間方向へのファイル分割を行いません.
+                              !
+                              ! Interval of time of separation of a file.
+                              !
+                              ! If this argument is omitted,
+                              ! a files is not separated in time direction.
+                              !
+
+    ! 作業変数
+    ! Work variables
+    !
+    real(DP):: interval_value
+                              ! データの出力間隔の数値.
+                              ! Numerical value for interval of history data output
+    real(DP):: origin_value
+                              ! データの出力開始時刻の数値.
+                              ! Numerical value for start time of history data output
+    real(DP):: terminus_value
+                              ! 出力終了時刻の数値.
+                              ! Numerical value for end time of output.
+    integer:: stat
+    character(STRING):: cause_c
+    character(*), parameter:: subname = "HistoryAutoAddVariable2"
+  continue
+    call BeginSub(subname, 'varname=%c', c1 = trim(varname), version = version)
+    stat = DC_NOERR
+    cause_c = ""
+
+    if ( present(time_units) ) then
+      origin_value = EvalByUnit( origin, time_units )
+    else
+      origin_value = EvalByUnit( origin, time_unit_bycreate )
+    end if
+
+    if ( present(time_units) ) then
+      terminus_value = EvalByUnit( terminus, time_units )
+    else
+      terminus_value = EvalByUnit( terminus, time_unit_bycreate )
+    end if
+
+    if ( present(interval) ) then
+      if ( present(time_units) ) then
+        interval_value = EvalByUnit( interval, time_units )
+      else
+        interval_value = EvalByUnit( interval, time_unit_bycreate )
+      end if
+    else
+      interval_value = 1.0
+    end if
+
+    call DbgMessage('origin=%f, terminus=%f, interval=%f', &
+      & d = (/ origin_value, terminus_value, interval_value /) )
+
+    call HistoryAutoAddVariable( &
+      & varname, dims, longname, units, &       ! (in)
+      & xtype, time_units, time_average, &      ! (in) optional
+      & file, &                                 ! (in) optional
+      & origin = origin_value, &                ! (in) optional
+      & terminus = terminus_value, &            ! (in) optional
+      & interval = interval_value, &            ! (in) optional
+      & slice_start = slice_start, &            ! (in) optional
+      & slice_end = slice_end, &                ! (in) optional
+      & slice_stride = slice_stride, &          ! (in) optional
+      & space_average = space_average, &        ! (in) optional
+      & newfile_interval = newfile_interval )   ! (in) optional
+
+999 continue
+    call StoreError(stat, subname, cause_c = cause_c)
+    call EndSub(subname, 'stat=%d', i = (/stat/) )
+  end subroutine HistoryAutoAddVariable2
+
+__EndOfFortran90Code__
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

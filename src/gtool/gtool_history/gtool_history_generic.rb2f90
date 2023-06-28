@@ -1,0 +1,927 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+require("optparse")
+#
+# "gtool_history_generic.f90" Generator with Ruby.
+#
+opt = OptionParser.new
+opt.on('--histput_dim=VAL') {|v| $histput_dim = v.to_i}
+opt.on('--histget_dim=VAL') {|v| $histget_dim = v.to_i}
+opt.parse!(ARGV)
+$histput_dim = 7 unless $histput_dim
+$histget_dim = 7 unless $histget_dim
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= gtool_history より提供される手続の引用仕様宣言
+!= Interfaces of procedures provided from "gtool_history"
+!
+! Authors::   Yasuhiro MORIKAWA, Eizi TOYODA
+! Version::   $Id: gtool_history_generic.rb2f90,v 1.9 2010-06-17 00:56:25 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2000-2009. All rights reserved.
+! License::   See COPYRIGHT[link:../../../COPYRIGHT]
+!
+
+module gtool_history_generic
+  !
+  != gtool_history より提供される手続の引用仕様宣言
+  != Interfaces of procedures provided from "gtool_history"
+  !
+  ! <b>Note that Japanese and English are described in parallel.</b>
+  !
+  ! モジュールの概要や使用方法については, gtool_history
+  ! を参照ください.
+  !
+  ! See "gtool_history" for brief and usage of this module.
+  !
+  !== Procedures List
+  !
+  ! 【出力用】
+  !
+  ! HistoryCreate       :: gtool4 データ出力用初期設定
+  ! HistoryAddVariable  :: 変数定義
+  ! HistoryCopyVariable :: 変数定義 (別ファイルの変数コピー)
+  ! HistoryPut          :: データ出力
+  ! HistoryAddAttr      :: 変数に属性付加
+  ! HistoryClose        :: 終了処理
+  ! HistorySetTime      :: 時刻指定
+  ! HistoryPutAxisMPI   :: 領域全体の座標データ指定 (MPI 使用時のみ有効)
+  !
+  ! 【入力用】
+  !
+  ! HistoryGet          :: データ入力 (固定長配列用)
+  ! HistoryGetPointer   :: データ入力 (ポインタ配列用)
+  ! HistoryGetAttr      :: 属性入力
+  !
+  ! 【その他】
+  !
+  ! HistoryInquire      :: gtool_history_types#GT_HISTORY 型変数への問い合わせ
+  ! HistoryCopy         :: gtool_history_types#GT_HISTORY 型変数のコピー
+  ! HistoryPutLine      :: gtool_history_types#GT_HISTORY 型変数の印字
+  ! HistoryInitialized  :: gtool_history_types#GT_HISTORY 型変数の初期設定をチェック
+  !
+  ! * gtool_history_types#GT_HISTORY_AXIS 関連
+  !
+  !   HistoryAxisCreate     :: 作成 (初期設定)
+  !   HistoryAxisCopy       :: コピー
+  !   HistoryAxisAddAttr    :: 属性付加
+  !   HistoryAxisInquire    :: 問い合わせ
+  !   HistoryAxisClear      :: 終了処理
+  !
+  ! * gtool_history_types#GT_HISTORY_VARINFO 関連
+  !
+  !   HistoryVarinfoCreate      :: 作成 (初期設定)
+  !   HistoryVarinfoCopy        :: コピー
+  !   HistoryVarinfoAddAttr     :: 属性付加
+  !   HistoryVarinfoInquire     :: 問い合わせ
+  !   HistoryVarinfoClear       :: 終了処理
+  !   HistoryVarinfoInitialized :: 初期設定チェック
+  !
+
+  use gtdata_types, only: GT_VARIABLE
+  use dc_types, only: STRING, TOKEN, DP, STDERR
+  use dc_trace, only: BeginSub, EndSub, DbgMessage
+  use dc_date_types, only: DC_DIFFTIME, UNIT_SYMBOL_ERR
+  implicit none
+
+  private
+  public:: HistoryInitialized
+  public:: Create, Copy, Inquire, Put_Attr
+  public:: HistoryCreate, HistoryClose, HistoryAxisClear, HistoryVarinfoClear
+  public:: HistoryAxisCreate
+  public:: HistoryVarinfoCreate
+  public:: HistoryInquire, HistoryAxisInquire, HistoryVarinfoInquire
+  public:: HistoryCopy, HistoryAxisCopy, HistoryVarinfoCopy, HistoryVarinfoInitialized
+  public:: HistoryPutLine
+  public:: HistoryAddVariable, HistoryCopyVariable
+  public:: HistoryPut
+  public:: HistoryAddAttr, HistoryAxisAddAttr, HistoryVarinfoAddAttr
+  public:: HistorySetTime
+  public:: HistoryGet, HistoryGetPointer
+  public:: HistoryGetAttr
+  public:: HistoryPutAxisMPI
+
+  public:: initialized
+                    ! 後方互換用.
+                    ! For backward compatibility.
+
+  interface initialized
+    logical function HistoryInitialized1( history ) result(result)
+      use gtool_history_types, only: GT_HISTORY
+      type(GT_HISTORY), intent(in):: history
+    end function HistoryInitialized1
+  end interface
+
+  interface HistoryInitialized
+    logical function HistoryInitialized0( history ) result(result)
+      use gtool_history_types, only: GT_HISTORY
+      type(GT_HISTORY), intent(in):: history
+    end function HistoryInitialized0
+  end interface
+
+  interface HistoryCreate
+    subroutine HistoryCreate1( &
+      & file, title, source, institution, &
+      & dims, dimsizes, longnames, units, origin, interval, &
+      & xtypes, history, origind, intervald, conventions, gt_version, overwrite, quiet, &
+      & flag_mpi_gather, flag_mpi_split, err )  !:doc-priority 20:
+
+      use gtool_history_types, only: GT_HISTORY
+      use dc_types, only: DP
+      character(*), intent(in):: file, title, source, institution, dims(:)
+      integer, intent(in):: dimsizes (:)
+      character(*), intent(in):: longnames (:)
+      character(*), intent(in):: units(:)
+      real, intent(in), optional:: origin, interval
+      character(*), intent(in),  optional:: xtypes(:)
+      type(GT_HISTORY), intent(out), optional, target:: history
+      real(DP), intent(in), optional:: origind, intervald
+      character(*), intent(in), optional:: conventions, gt_version
+      logical, intent(in), optional:: overwrite, quiet, flag_mpi_gather, flag_mpi_split
+      logical, intent(out), optional:: err
+    end subroutine HistoryCreate1
+
+    subroutine HistoryCreate2( &
+      & file, title, source, institution, &
+      & dims, dimsizes, longnames, units, origin, interval, &
+      & xtypes, history, conventions, gt_version, overwrite, quiet, &
+      & flag_mpi_gather, flag_mpi_split, err ) !:doc-priority 40:
+
+      use gtool_history_types, only: GT_HISTORY
+      use dc_date_types, only: DC_DIFFTIME
+      character(*), intent(in):: file, title, source, institution, dims(:)
+      integer, intent(in):: dimsizes (:)
+      character(*), intent(in):: longnames (:)
+      character(*), intent(in):: units(:)
+      type(DC_DIFFTIME), intent(in):: origin
+      type(DC_DIFFTIME), intent(in), optional:: interval
+      character(*), intent(in),  optional:: xtypes(:)
+      type(GT_HISTORY), intent(out), optional, target:: history
+      character(*), intent(in), optional:: conventions, gt_version
+      logical, intent(in), optional:: overwrite, quiet, flag_mpi_gather, flag_mpi_split
+      logical, intent(out), optional:: err
+    end subroutine HistoryCreate2
+
+    subroutine HistoryCreate3(file, title, source, institution, &
+      & axes, origin, interval, history, origind, intervald, conventions, gt_version, &
+      & overwrite, quiet, flag_mpi_gather, flag_mpi_split, err ) !:doc-priority 30:
+      use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS
+      use dc_types, only: DP
+      character(*), intent(in):: file, title, source, institution
+      type(GT_HISTORY_AXIS), intent(in):: axes(:)
+      real, intent(in), optional:: origin, interval
+      type(GT_HISTORY), intent(out), optional, target:: history
+      real(DP), intent(in), optional:: origind, intervald
+      character(*), intent(in), optional:: conventions, gt_version
+      logical, intent(in), optional:: overwrite, quiet, flag_mpi_gather, flag_mpi_split
+      logical, intent(out), optional:: err
+    end subroutine HistoryCreate3
+
+  end interface
+
+  interface HistoryAxisCreate
+    subroutine HistoryAxisCreate1( axis, &
+      & name, size, longname, units, xtype)
+      use gtool_history_types, only: GT_HISTORY_AXIS
+      type(GT_HISTORY_AXIS),intent(out) :: axis
+      character(*) , intent(in):: name     ! 次元変数名
+      integer, intent(in):: size     ! 次元長 (配列サイズ)
+      character(*) , intent(in):: longname ! 次元変数の記述的名称
+      character(*) , intent(in):: units    ! 次元変数の単位
+      character(*) , intent(in):: xtype    ! 次元変数の型
+    end subroutine HistoryAxisCreate1
+  end interface
+
+  interface HistoryVarinfoCreate
+    subroutine HistoryVarinfoCreate1( varinfo, & ! (out)
+      & name, dims, longname, units, xtype, &    ! (in)
+      & time_average, average, err &            ! (in) optional
+      & )
+      use gtool_history_types, only: GT_HISTORY_VARINFO
+      implicit none
+      type(GT_HISTORY_VARINFO),intent(inout) :: varinfo
+      character(*), intent(in):: name     ! 変数名
+      character(*), intent(in):: dims(:)  ! 依存する次元
+      character(*), intent(in):: longname ! 変数の記述的名称
+      character(*), intent(in):: units    ! 変数の単位
+      character(*), intent(in), optional:: xtype
+                                           ! 変数の型
+      logical, intent(in), optional:: time_average
+                                           ! 時間平均
+      logical, intent(in), optional:: average
+                                           ! 時間平均 (後方互換用)
+      logical, intent(out), optional:: err
+    end subroutine HistoryVarinfoCreate1
+  end interface
+
+  interface Create
+    subroutine HistoryAxisCreate2( axis, &
+      & name, size, longname, units, xtype)
+      use gtool_history_types, only: GT_HISTORY_AXIS
+      type(GT_HISTORY_AXIS),intent(out) :: axis
+      character(*) , intent(in):: name     ! 次元変数名
+      integer, intent(in):: size     ! 次元長 (配列サイズ)
+      character(*) , intent(in):: longname ! 次元変数の記述的名称
+      character(*) , intent(in):: units    ! 次元変数の単位
+      character(*) , intent(in):: xtype    ! 次元変数の型
+    end subroutine HistoryAxisCreate2
+
+    subroutine HistoryVarinfoCreate2( varinfo, & ! (out)
+      & name, dims, longname, units, xtype, &    ! (in)
+      & time_average, average, err &            ! (in) optional
+      & )
+      use gtool_history_types, only: GT_HISTORY_VARINFO
+      implicit none
+      type(GT_HISTORY_VARINFO),intent(inout) :: varinfo
+      character(*), intent(in):: name     ! 変数名
+      character(*), intent(in):: dims(:)  ! 依存する次元
+      character(*), intent(in):: longname ! 変数の記述的名称
+      character(*), intent(in):: units    ! 変数の単位
+      character(*), intent(in), optional:: xtype
+                                           ! 変数の型
+      logical, intent(in), optional:: time_average
+                                           ! 時間平均
+      logical, intent(in), optional:: average
+                                           ! 時間平均 (後方互換用)
+      logical, intent(out), optional:: err
+    end subroutine HistoryVarinfoCreate2
+  end interface
+
+  interface HistoryAddVariable
+    recursive subroutine HistoryAddVariable1( &
+      & varname, dims, longname, units, &
+      & xtype, time_average, average, history, err )
+      use gtool_history_types, only: GT_HISTORY
+      character(len = *), intent(in):: varname, dims(:), longname, units
+      character(len = *), intent(in), optional:: xtype
+      logical, intent(in), optional:: time_average, average
+      type(GT_HISTORY), intent(inout), optional, target:: history
+      logical, intent(out), optional:: err
+    end subroutine HistoryAddVariable1
+
+    subroutine HistoryAddVariable2( &
+      & varinfo, history, err )
+      use gtool_history_types, only: GT_HISTORY, GT_HISTORY_VARINFO
+      type(GT_HISTORY_VARINFO), intent(in)             :: varinfo
+      type(GT_HISTORY),         intent(inout), optional:: history
+      logical, intent(out), optional:: err
+    end subroutine HistoryAddVariable2
+  end interface
+
+  interface HistoryCopy
+    subroutine HistoryCopy1(hist_dest, file, hist_src, &
+      & title, source, institution, &
+      & origin, interval, &
+      & conventions, gt_version)
+      use gtool_history_types, only: GT_HISTORY
+      type(GT_HISTORY), intent(out), target:: hist_dest
+      character(*), intent(in):: file
+      type(GT_HISTORY), intent(in), optional, target:: hist_src
+      character(*), intent(in), optional:: title, source, institution
+      real, intent(in), optional:: origin, interval
+      character(*), intent(in), optional:: conventions, gt_version
+    end subroutine HistoryCopy1
+  end interface
+
+  interface HistoryAxisCopy
+    subroutine HistoryAxisCopy1(axis_dest, axis_src, err, &
+      & name, length, longname, units, xtype)
+      use gtool_history_types, only: GT_HISTORY_AXIS
+      type(GT_HISTORY_AXIS),intent(out) :: axis_dest ! コピー先 GT_HISTORY_AXIS
+      type(GT_HISTORY_AXIS),intent(in)  :: axis_src  ! コピー元 GT_HISTORY_AXIS
+      logical, intent(out), optional :: err
+      character(*) , intent(in), optional:: name     ! 次元変数名
+      integer, intent(in), optional:: length         ! 次元長 (配列サイズ)
+      character(*) , intent(in), optional:: longname ! 次元変数の記述的名称
+      character(*) , intent(in), optional:: units    ! 次元変数の単位
+      character(*) , intent(in), optional:: xtype    ! 次元変数の型
+    end subroutine HistoryAxisCopy1
+  end interface
+
+  interface HistoryVarinfoCopy
+    subroutine HistoryVarinfoCopy1(varinfo_dest, varinfo_src, err, &
+      & name, dims, longname, units, xtype )
+      use gtool_history_types, only: GT_HISTORY_VARINFO
+      type(GT_HISTORY_VARINFO),intent(out):: varinfo_dest
+      type(GT_HISTORY_VARINFO),intent(in):: varinfo_src
+      logical, intent(out), optional:: err
+      character(*) , intent(in), optional:: name     ! 次元変数名
+      character(*) , intent(in), optional, target:: dims(:)  ! 依存する次元
+      character(*) , intent(in), optional:: longname ! 次元変数の記述的名称
+      character(*) , intent(in), optional:: units    ! 次元変数の単位
+      character(*) , intent(in), optional:: xtype    ! 次元変数の型
+    end subroutine HistoryVarinfoCopy1
+  end interface
+
+  interface Copy
+    subroutine HistoryCopy2(hist_dest, file, hist_src, &
+      & title, source, institution, &
+      & origin, interval, &
+      & conventions, gt_version)
+      use gtool_history_types, only: GT_HISTORY
+      type(GT_HISTORY), intent(out), target:: hist_dest
+      character(*), intent(in):: file
+      type(GT_HISTORY), intent(in), optional, target:: hist_src
+      character(*), intent(in), optional:: title, source, institution
+      real, intent(in), optional:: origin, interval
+      character(*), intent(in), optional:: conventions, gt_version
+    end subroutine HistoryCopy2
+
+    subroutine HistoryAxisCopy2(axis_dest, axis_src, err, &
+      & name, length, longname, units, xtype)
+      use gtool_history_types, only: GT_HISTORY_AXIS
+      type(GT_HISTORY_AXIS),intent(out) :: axis_dest ! コピー先 GT_HISTORY_AXIS
+      type(GT_HISTORY_AXIS),intent(in)  :: axis_src  ! コピー元 GT_HISTORY_AXIS
+      logical, intent(out), optional :: err
+      character(*) , intent(in), optional:: name     ! 次元変数名
+      integer, intent(in), optional:: length         ! 次元長 (配列サイズ)
+      character(*) , intent(in), optional:: longname ! 次元変数の記述的名称
+      character(*) , intent(in), optional:: units    ! 次元変数の単位
+      character(*) , intent(in), optional:: xtype    ! 次元変数の型
+    end subroutine HistoryAxisCopy2
+
+    subroutine HistoryVarinfoCopy2(varinfo_dest, varinfo_src, err, &
+      & name, dims, longname, units, xtype )
+      use gtool_history_types, only: GT_HISTORY_VARINFO
+      type(GT_HISTORY_VARINFO),intent(out):: varinfo_dest
+      type(GT_HISTORY_VARINFO),intent(in):: varinfo_src
+      logical, intent(out), optional:: err
+      character(*) , intent(in), optional:: name     ! 次元変数名
+      character(*) , intent(in), optional, target:: dims(:)  ! 依存する次元
+      character(*) , intent(in), optional:: longname ! 次元変数の記述的名称
+      character(*) , intent(in), optional:: units    ! 次元変数の単位
+      character(*) , intent(in), optional:: xtype    ! 次元変数の型
+    end subroutine HistoryVarinfoCopy2
+  end interface
+
+  interface HistoryCopyVariable
+    subroutine HistoryCopyVariable1(file, varname, history, overwrite)
+      use gtool_history_types, only: GT_HISTORY
+      character(len = *), intent(in):: file, varname
+      type(GT_HISTORY), intent(inout), optional, target:: history
+      logical, intent(in), optional:: overwrite
+    end subroutine HistoryCopyVariable1
+  end interface
+
+  interface HistoryInquire
+    subroutine HistoryInquire1(history, err, file, title, source, &
+      & dims, dimsizes, longnames, units, xtypes, &
+      & institution, origin, interval, newest, oldest, &
+      & conventions, gt_version, &
+      & axes, varinfo )
+      use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO
+      type(GT_HISTORY), intent(in):: history
+      logical, intent(out), optional :: err
+      character(*), intent(out), optional:: file, title, source, institution
+      real,intent(out), optional:: origin, interval
+      real,intent(out), optional:: newest ! 最新の時刻
+      real,intent(out), optional:: oldest ! 最初の時刻
+      character(*), intent(out), optional:: conventions, gt_version
+      character(*), pointer, optional:: dims(:) ! (out)
+      integer,pointer, optional:: dimsizes(:) ! (out)
+      character(*), pointer, optional:: longnames(:) ! (out)
+      character(*), pointer, optional:: units(:) ! (out)
+      character(*), pointer, optional:: xtypes(:) ! (out)
+      type(GT_HISTORY_AXIS), pointer, optional :: axes(:) ! (out)
+      type(GT_HISTORY_VARINFO), pointer, optional :: varinfo(:) ! (out)
+    end subroutine HistoryInquire1
+
+    subroutine HistoryInquire2(history, err, file, title, source, &
+      & dims, dimsizes, longnames, units, xtypes, &
+      & institution, origin, interval, newest, oldest, &
+      & conventions, gt_version, &
+      & axes, varinfo )
+      use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO
+      character(*), intent(in):: history
+      logical, intent(out), optional :: err
+      character(*), intent(out), optional:: file, title, source, institution
+      real,intent(out), optional:: origin, interval, newest, oldest
+      character(*), intent(out), optional:: conventions, gt_version
+      character(*), pointer, optional:: dims(:) ! (out)
+      integer,pointer, optional:: dimsizes(:) ! (out)
+      character(*), pointer, optional:: longnames(:) ! (out)
+      character(*), pointer, optional:: units(:) ! (out)
+      character(*), pointer, optional:: xtypes(:) ! (out)
+      type(GT_HISTORY_AXIS), pointer, optional :: axes(:) ! (out)
+      type(GT_HISTORY_VARINFO), pointer, optional :: varinfo(:) ! (out)
+    end subroutine HistoryInquire2
+
+  end interface
+
+  interface HistoryAxisInquire
+    subroutine HistoryAxisInquire1( axis, &
+      & name, size, longname, units, xtype)
+      use gtool_history_types, only: GT_HISTORY_AXIS
+      type(GT_HISTORY_AXIS),intent(in) :: axis
+      character(*) , intent(out), optional:: name     ! 次元変数名
+      integer, intent(out), optional:: size     ! 次元長 (配列サイズ)
+      character(*) , intent(out), optional:: longname ! 次元変数の記述的名称
+      character(*) , intent(out), optional:: units    ! 次元変数の単位
+      character(*) , intent(out), optional:: xtype    ! 次元変数の型
+    end subroutine HistoryAxisInquire1
+  end interface
+
+  interface HistoryVarinfoInquire
+    subroutine HistoryVarinfoInquire1( varinfo, & ! (in)
+      & name, dims, longname, units, xtype, &     ! (out) optional
+      & time_average, average, err )              ! (out) optional
+      use gtool_history_types, only: GT_HISTORY_VARINFO
+      type(GT_HISTORY_VARINFO),intent(in) :: varinfo
+      character(*), intent(out), optional:: name     ! 変数名
+      character(*), pointer,     optional:: dims(:)  !(out) 依存する次元
+      character(*), intent(out), optional:: longname ! 変数の記述的名称
+      character(*), intent(out), optional:: units    ! 変数の単位
+      character(*), intent(out), optional:: xtype    ! 変数の型
+      logical, intent(out), optional:: time_average  ! 時間平均
+      logical, intent(out), optional:: average       ! 時間平均 (後方互換用)
+      logical, intent(out), optional:: err
+    end subroutine HistoryVarinfoInquire1
+  end interface
+
+  interface Inquire
+    subroutine HistoryInquire3(history, err, file, title, source, &
+      & dims, dimsizes, longnames, units, xtypes, &
+      & institution, origin, interval, newest, oldest, &
+      & conventions, gt_version, &
+      & axes, varinfo )
+      use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO
+      type(GT_HISTORY), intent(in):: history
+      logical, intent(out), optional :: err
+      character(*), intent(out), optional:: file, title, source, institution
+      real,intent(out), optional:: origin, interval
+      real,intent(out), optional:: newest ! 最新の時刻
+      real,intent(out), optional:: oldest ! 最初の時刻
+      character(*), intent(out), optional:: conventions, gt_version
+      character(*), pointer, optional:: dims(:) ! (out)
+      integer,pointer, optional:: dimsizes(:) ! (out)
+      character(*), pointer, optional:: longnames(:) ! (out)
+      character(*), pointer, optional:: units(:) ! (out)
+      character(*), pointer, optional:: xtypes(:) ! (out)
+      type(GT_HISTORY_AXIS), pointer, optional :: axes(:) ! (out)
+      type(GT_HISTORY_VARINFO), pointer, optional :: varinfo(:) ! (out)
+    end subroutine HistoryInquire3
+
+    subroutine HistoryInquire4(history, err, file, title, source, &
+      & dims, dimsizes, longnames, units, xtypes, &
+      & institution, origin, interval, newest, oldest, &
+      & conventions, gt_version, &
+      & axes, varinfo )
+      use gtool_history_types, only: GT_HISTORY_AXIS, GT_HISTORY_VARINFO
+      character(*), intent(in):: history
+      logical, intent(out), optional :: err
+      character(*), intent(out), optional:: file, title, source, institution
+      real,intent(out), optional:: origin, interval, newest, oldest
+      character(*), intent(out), optional:: conventions, gt_version
+      character(*), pointer, optional:: dims(:) ! (out)
+      integer,pointer, optional:: dimsizes(:) ! (out)
+      character(*), pointer, optional:: longnames(:) ! (out)
+      character(*), pointer, optional:: units(:) ! (out)
+      character(*), pointer, optional:: xtypes(:) ! (out)
+      type(GT_HISTORY_AXIS), pointer, optional :: axes(:) ! (out)
+      type(GT_HISTORY_VARINFO), pointer, optional :: varinfo(:) ! (out)
+    end subroutine HistoryInquire4
+
+    subroutine HistoryAxisInquire2( axis, &
+      & name, size, longname, units, xtype)
+      use gtool_history_types, only: GT_HISTORY_AXIS
+      type(GT_HISTORY_AXIS),intent(in) :: axis
+      character(*) , intent(out), optional:: name     ! 次元変数名
+      integer, intent(out), optional:: size     ! 次元長 (配列サイズ)
+      character(*) , intent(out), optional:: longname ! 次元変数の記述的名称
+      character(*) , intent(out), optional:: units    ! 次元変数の単位
+      character(*) , intent(out), optional:: xtype    ! 次元変数の型
+    end subroutine HistoryAxisInquire2
+
+    subroutine HistoryVarinfoInquire2( varinfo, & ! (in)
+      & name, dims, longname, units, xtype, &     ! (out) optional
+      & time_average, average, err )              ! (out) optional
+      use gtool_history_types, only: GT_HISTORY_VARINFO
+      type(GT_HISTORY_VARINFO),intent(in) :: varinfo
+      character(*), intent(out), optional:: name     ! 変数名
+      character(*), pointer,     optional:: dims(:)  !(out) 依存する次元
+      character(*), intent(out), optional:: longname ! 変数の記述的名称
+      character(*), intent(out), optional:: units    ! 変数の単位
+      character(*), intent(out), optional:: xtype    ! 変数の型
+      logical, intent(out), optional:: time_average  ! 時間平均
+      logical, intent(out), optional:: average       ! 時間平均 (後方互換用)
+      logical, intent(out), optional:: err
+    end subroutine HistoryVarinfoInquire2
+  end interface
+
+  interface
+    subroutine HistoryAxisClear(axis)
+      use gtool_history_types, only: GT_HISTORY_AXIS
+      type(GT_HISTORY_AXIS),intent(inout) :: axis
+    end subroutine HistoryAxisClear
+  end interface
+
+  interface HistoryVarinfoClear
+    subroutine HistoryVarinfoClear0(varinfo, err)
+      use gtool_history_types, only: GT_HISTORY_VARINFO
+      type(GT_HISTORY_VARINFO),intent(inout) :: varinfo
+      logical, intent(out), optional:: err
+    end subroutine HistoryVarinfoClear0
+  end interface
+
+  interface HistoryVarinfoInitialized
+    logical function HistoryVarinfoInitialized0( varinfo ) result(result)
+      use gtool_history_types, only: GT_HISTORY_VARINFO
+      type(GT_HISTORY_VARINFO),intent(in) :: varinfo
+    end function HistoryVarinfoInitialized0
+  end interface
+
+  interface HistoryPutLine
+    subroutine HistoryPutLine( history, unit, indent, err )
+      use gtool_history_types, only: GT_HISTORY
+      type(GT_HISTORY), intent(in), target, optional:: history
+      integer, intent(in), optional:: unit
+      character(*), intent(in), optional:: indent
+      logical, intent(out), optional:: err
+    end subroutine HistoryPutLine
+  end interface
+
+  interface
+    subroutine HistorySetTime(time, history, difftime, timed)
+      use gtool_history_types, only: GT_HISTORY
+      use dc_date_types, only: DC_DIFFTIME
+      use dc_types, only: DP
+      real, intent(in), optional:: time
+      type(GT_HISTORY), intent(inout), optional, target:: history
+      type(DC_DIFFTIME), intent(in), optional:: difftime
+      real(DP), intent(in), optional:: timed
+    end subroutine HistorySetTime
+  end interface
+
+  interface
+    subroutine HistoryClose( history, quiet, err )
+      use gtool_history_types, only: GT_HISTORY
+      type(GT_HISTORY), intent(inout), optional, target:: history
+      logical, intent(in), optional:: quiet
+      logical, intent(out), optional:: err
+    end subroutine HistoryClose
+  end interface
+
+  interface HistoryPut
+
+__EndOfFortran90Code__
+
+types = ["Double", "Real", "Int"]
+def ValueOrArray(num)
+  return "value" if num == 0
+  return "array"
+end
+types.each{ |type|
+for num in 0..$histput_dim
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryPut#{type}#{num}( varname, #{ValueOrArray(num)}, &
+      & history, range, time, quiet, &
+      & difftime, timed, time_average_store, err ) #{ifelse(num, 0, %Q{ !:doc-priority 30: }, %Q{ !:doc-priority 40: })}
+      use gtool_history_types, only: GT_HISTORY
+      use dc_date_types, only: DC_DIFFTIME
+      use dc_types, only: DP
+      character(*), intent(in):: varname
+      #{$type_intent_in[type]}, intent(in):: #{ValueOrArray(num)}#{array_colon("#{num}")}
+      type(GT_HISTORY), intent(inout), optional, target:: history
+      character(*), intent(in), optional:: range
+      real, intent(in), optional:: time
+      logical, intent(in), optional:: quiet
+      type(DC_DIFFTIME), intent(in), optional:: difftime
+      real(DP), intent(in), optional:: timed
+      logical, intent(in), optional:: time_average_store
+      logical, intent(out), optional:: err
+    end subroutine HistoryPut#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryPutChar0( varname, value, &
+      & history, range, time, quiet, &
+      & difftime, timed, time_average_store, err ) !:doc-priority 35:
+      use gtool_history_types, only: GT_HISTORY
+      use dc_date_types, only: DC_DIFFTIME
+      use dc_types, only: DP
+      character(*), intent(in):: varname
+      character(*), intent(in):: value
+      type(GT_HISTORY), intent(inout), optional, target:: history
+      character(*), intent(in), optional:: range
+      real, intent(in), optional:: time
+      logical, intent(in), optional:: quiet
+      type(DC_DIFFTIME), intent(in), optional:: difftime
+      real(DP), intent(in), optional:: timed
+      logical, intent(in), optional:: time_average_store
+      logical, intent(out), optional:: err
+    end subroutine HistoryPutChar0
+
+  end interface
+
+  interface HistoryPutAxisMPI
+
+__EndOfFortran90Code__
+
+types = ["Real", "Double", "Int"]
+types.each{ |type|
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryPutAxisMPI#{type}( varname, array, &
+      & history, err )
+      use gtool_history_types, only: GT_HISTORY
+      use dc_types, only: DP
+      character(*), intent(in):: varname
+      #{$type_intent_in[type]}, intent(in):: array(:)
+      type(GT_HISTORY), intent(inout), optional, target:: history
+      logical, intent(out), optional:: err
+    end subroutine HistoryPutAxisMPI#{type}
+
+__EndOfFortran90Code__
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+  interface HistoryAddAttr
+
+__EndOfFortran90Code__
+
+types = ["Char", "Logical", "Int", "Real", "Double"]
+def toChar(type, value)
+  return "trim(#{value})" if type == "Char"
+  return "trim(toChar(#{value}))"
+end
+def Num2Array(type, value)
+  return value if type == "Char"
+  return value if type == "Logical"
+  return "(/#{value}/)"
+end
+types.each{ |type|
+for num in 0..1
+next if num == 1 && type == "Char"
+next if num == 1 && type == "Logical"
+print <<"__EndOfFortran90Code__"
+
+  subroutine HistoryAddAttr#{type}#{num}( &
+    & varname, attrname, value, history, err)
+    use gtool_history_types, only: GT_HISTORY
+    use dc_types, only: DP
+    character(*), intent(in):: varname
+    character(*), intent(in):: attrname
+    #{$type_intent_in[type]}, intent(in):: value#{array_colon("#{num}")}
+    type(GT_HISTORY), intent(inout), target, optional:: history
+    logical, intent(out), optional:: err
+  end subroutine HistoryAddAttr#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+  interface HistoryAxisAddAttr
+
+__EndOfFortran90Code__
+
+types = ["Char", "Logical", "Int", "Real", "Double"]
+types.each{ |type|
+for num in 0..1
+next if num == 1 && type == "Char"
+next if num == 1 && type == "Logical"
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryAxisAddAttr#{type}#{num}( &
+      & axis, attrname, value)
+      use gtool_history_types, only: GT_HISTORY_AXIS
+      use dc_types, only: DP
+      type(GT_HISTORY_AXIS),intent(inout) :: axis
+      character(*), intent(in):: attrname ! 属性の名前
+      #{$type_intent_in[type]}, intent(in):: value#{array_colon("#{num}")}
+    end subroutine HistoryAxisAddAttr#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+  interface HistoryVarinfoAddAttr
+
+__EndOfFortran90Code__
+
+types = ["Char", "Logical", "Int", "Real", "Double"]
+types.each{ |type|
+for num in 0..1
+next if num == 1 && type == "Char"
+next if num == 1 && type == "Logical"
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryVarinfoAddAttr#{type}#{num}( &
+      & varinfo, attrname, value, err )
+      use gtool_history_types, only: GT_HISTORY_VARINFO
+      use dc_types, only: DP
+      type(GT_HISTORY_VARINFO),intent(inout) :: varinfo
+      character(*), intent(in):: attrname ! 属性の名前
+      #{$type_intent_in[type]}, intent(in):: value#{array_colon("#{num}")}
+      logical, intent(out), optional:: err
+    end subroutine HistoryVarinfoAddAttr#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+  interface Put_Attr
+
+__EndOfFortran90Code__
+
+types = ["Char", "Logical", "Int", "Real", "Double"]
+types.each{ |type|
+for num in 0..1
+next if num == 1 && type == "Char"
+next if num == 1 && type == "Logical"
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryAxisAddAttr2#{type}#{num}( &
+      & axis, attrname, value)
+      use gtool_history_types, only: GT_HISTORY_AXIS
+      use dc_types, only: DP
+      type(GT_HISTORY_AXIS),intent(inout) :: axis
+      character(*), intent(in):: attrname ! 属性の名前
+      #{$type_intent_in[type]}, intent(in):: value#{array_colon("#{num}")}
+    end subroutine HistoryAxisAddAttr2#{type}#{num}
+
+    subroutine HistoryVarinfoAddAttr2#{type}#{num}( &
+      & varinfo, attrname, value, err )
+      use gtool_history_types, only: GT_HISTORY_VARINFO
+      use dc_types, only: DP
+      type(GT_HISTORY_VARINFO),intent(inout) :: varinfo
+      character(*), intent(in):: attrname ! 属性の名前
+      #{$type_intent_in[type]}, intent(in):: value#{array_colon("#{num}")}
+      logical, intent(out), optional:: err
+    end subroutine HistoryVarinfoAddAttr2#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+  interface HistoryGetAttr
+
+__EndOfFortran90Code__
+
+types = ["Char", "Int", "Real", "Double"]
+types.each{ |type|
+for num in 0..1
+next if num == 1 && type == "Char"
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryGettAttr#{type}#{num}( &
+      & file, varname, attrname, & ! (in)
+      & value, &                   ! (out)
+      & flag_mpi_split, &          ! (in) optional
+      & err )                      ! (out) optional
+
+      use dc_types, only: DP
+      character(*), intent(in):: file
+      character(*), intent(in):: varname
+      character(*), intent(in):: attrname
+      #{$type_intent_in[type]}, intent(out):: value#{array_colon("#{num}")}
+      logical, intent(in), optional:: flag_mpi_split
+      logical, intent(out), optional:: err
+
+    end subroutine HistoryGettAttr#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+__EndOfFortran90Code__
+
+
+timetypes = ["Double", "Real", "Int"]
+types = ["Double", "Real", "Int"]
+fixorptrs = ["", "Pointer"]
+
+def timekind(timetype)
+  return "D" if timetype == "Double"
+  return "R" if timetype == "Real"
+  return "I" if timetype == "Int"
+  return ""
+end
+
+fixorptrs.each{ |fixorptr|
+
+print <<"__EndOfFortran90Code__"
+
+                      #{ifelse(fixorptr, "Pointer", %Q{
+  !--------------------------
+  !  ポインタ配列用
+  !  For pointer array
+  interface HistoryGetPointer
+                      }, %Q{
+  !--------------------------
+  !  固定長配列用
+  !  For fixed length array
+  interface HistoryGet
+                      })}
+
+__EndOfFortran90Code__
+
+types.each{ |type|
+for num in 0..$histget_dim
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryGet#{type}#{num}#{fixorptr}( &
+      & file, varname, array, range, quiet, &
+      & flag_mpi_split, returned_time, flag_time_exist, err)
+
+      use dc_types, only: DP
+      character(*), intent(in):: file, varname
+      character(*), intent(in), optional:: range
+      logical, intent(in), optional:: quiet
+                        #{ifelse(fixorptr, "Pointer", %Q{
+      #{$type_intent_out[type]}, pointer:: array#{array_colon("#{num}")} ! (out)
+                        }, %Q{
+      #{$type_intent_out[type]}, intent(out):: array#{array_colon("#{num}")}
+                        })}
+      logical, intent(in), optional:: flag_mpi_split
+      real(DP), intent(out), optional:: returned_time
+      logical, intent(out), optional:: flag_time_exist
+      logical, intent(out), optional:: err
+    end subroutine HistoryGet#{type}#{num}#{fixorptr}
+
+__EndOfFortran90Code__
+
+timetypes.each{ |timetype|
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryGet#{type}#{num}#{fixorptr}Time#{timekind(timetype)}( &
+      & file, varname, array, time, quiet, &
+      & flag_mpi_split, returned_time, flag_time_exist, err)
+
+      use dc_types, only: DP
+      character(*), intent(in):: file, varname
+      #{$type_intent_in[timetype]}, intent(in):: time
+      logical, intent(in), optional:: quiet
+                        #{ifelse(fixorptr, "Pointer", %Q{
+      #{$type_intent_out[type]}, pointer:: array#{array_colon("#{num}")} ! (out)
+                        }, %Q{
+      #{$type_intent_out[type]}, intent(out):: array#{array_colon("#{num}")}
+                        })}
+      logical, intent(in), optional:: flag_mpi_split
+      real(DP), intent(out), optional:: returned_time
+      logical, intent(out), optional:: flag_time_exist
+      logical, intent(out), optional:: err
+    end subroutine HistoryGet#{type}#{num}#{fixorptr}Time#{timekind(timetype)}
+
+__EndOfFortran90Code__
+} # end of timetypes.each
+end # end of for num in 0..$histget_dim
+} # end of types.each
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+__EndOfFortran90Code__
+
+} # end of "fixorptrs.each"
+undef timekind
+
+print <<"__EndOfFortran90Code__"
+
+  character(*), parameter:: version = &
+    & '$Name:  $' // &
+    & '$Id: gtool_history_generic.rb2f90,v 1.9 2010-06-17 00:56:25 morikawa Exp $'
+
+end module gtool_history_generic
+
+__EndOfFortran90Code__
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

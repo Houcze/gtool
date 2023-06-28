@@ -1,0 +1,206 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+#
+# "historyaddattr.F90" Generator with Ruby.
+#
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= gtool4 データ内の変数への属性付加
+!= Add attributes to a variable in gtool4 data
+!
+! Authors::   Yasuhiro MORIKAWA, Eizi TOYODA
+! Version::   $Id: historyaddattr.rb2f90,v 1.2 2009-05-25 09:45:20 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2000-2009. All rights reserved.
+! License::   See COPYRIGHT[link:../../../COPYRIGHT]
+!
+__EndOfFortran90Code__
+
+types = ["Char", "Logical", "Int", "Real", "Double"]
+def toChar(type, value)
+  return "trim(#{value})" if type == "Char"
+  return "trim(toChar(#{value}))"
+end
+def Num2Array(type, value)
+  return value if type == "Char"
+  return value if type == "Logical"
+  return "(/#{value}/)"
+end
+types.each{ |type|
+for num in 0..1
+next if num == 1 && type == "Char"
+next if num == 1 && type == "Logical"
+print <<"__EndOfFortran90Code__"
+
+  subroutine HistoryAddAttr#{type}#{num}( &
+    & varname, attrname, value, history, err)
+    !
+                    #{ifelse(type, "Char", %Q{
+    !
+    !== gtool4 データ内の変数への属性付加
+    !
+    ! gtool4 データおよびそのデータ内の変数に属性を付加します。
+    ! このサブルーチンを用いる前に、 HistoryCreate による初期設定が
+    ! 必要です。
+    !
+    ! 属性名 *attrname* の先頭にプラス "<b><tt>+</tt></b>" を付加する
+    ! 場合は、gtool4 データ自体の属性 (大域属性) として属性が付加されます。
+    ! この場合、*varname* は無視されますが、
+    ! その場合でも *varname* へはデータ内に存在する変数名を与えてください。
+    !
+    ! *HistoryAddAttr* は複数のサブルーチンの総称名です。*value* には
+    ! いくつかの型を与えることが可能です。
+    ! 下記のサブルーチンを参照ください。
+    !
+                    })}
+    !
+    use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO, GT_HISTORY_ATTR
+    use gtool_history_internal, only: default, lookup_var_or_dim
+    use gtdata_generic, only: Put_Attr
+    use gtdata_types, only: GT_VARIABLE
+    use dc_string, only: toChar, JoinChar
+    use dc_url, only: GT_PLUS
+    use dc_error, only: StoreError, DC_NOERR, NF90_ENOTVAR, HST_EMPINOAXISDATA
+    use dc_message, only: MessageNotify
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_types, only: STRING, TOKEN, DP
+    implicit none
+    character(*), intent(in):: varname
+                    #{ifelse(type, "Char", %Q{
+                              ! 変数の名前。
+                              !
+                              ! ここで指定するものは、
+                              ! HistoryCreateの *dims* 、
+                              ! または HistoryAddVariable の
+                              ! *varname* で既に指定されてい
+                              ! なければなりません。
+                              !
+                    })}
+    character(*), intent(in):: attrname
+                    #{ifelse(type, "Char", %Q{
+                              ! 変数またはファイル全体に付
+                              ! 加する属性の名前
+                              !
+                              ! "<b><tt>+</tt></b>" (プラ
+                              ! ス) を属性名の先頭につける
+                              ! 場合には、ファイル全体に属
+                              ! 性を付加します。
+                              ! ファイル全体へ属性を付加
+                              ! する場合でも、 HistoryCreate
+                              ! の *dims* 、または
+                              ! HistoryAddVariable の
+                              ! *varname* で既に指定されてい
+                              ! る変数を *varname* に指定する
+                              ! 必要があります。
+                              !
+                    })}
+    #{$type_intent_in[type]}, intent(in):: value#{array_colon("#{num}")}
+                    #{ifelse(type, "Char", %Q{
+                              ! 属性の値
+                              !
+                    })}
+    type(GT_HISTORY), intent(inout), target, optional:: history
+                    #{ifelse(type, "Char", %Q{
+                              ! 出力ファイルの設定に関する情報を
+                              ! 格納した構造体
+                              !
+                              ! ここに指定するものは、
+                              ! HistoryCreate によって初期設定
+                              ! されていなければなりません。
+                              !
+                    })}
+    logical, intent(out), optional:: err
+                    #{ifelse(type, "Char", %Q{
+                              ! 例外処理用フラグ.
+                              ! デフォルトでは, この手続き内でエラーが
+                              ! 生じた場合, プログラムは強制終了します.
+                              ! 引数 *err* が与えられる場合,
+                              ! プログラムは強制終了せず, 代わりに
+                              ! *err* に .true. が代入されます.
+                              !
+                              ! Exception handling flag.
+                              ! By default, when error occur in
+                              ! this procedure, the program aborts.
+                              ! If this *err* argument is given,
+                              ! .true. is substituted to *err* and
+                              ! the program does not abort.
+                    })}
+    type(GT_HISTORY), pointer:: hst =>null()
+    type(GT_VARIABLE):: var
+    integer:: v_ord
+    logical:: err_not_found
+    integer:: stat
+    character(STRING):: cause_c
+    character(len = *), parameter:: subname = "HistoryAddAttr#{type}#{num}"
+  continue
+    call BeginSub(subname, &
+      & 'varname=<%c> attrname=<%c>, value=<%c>', &
+      & c1=trim(varname), c2=trim(attrname), c3=#{toChar(type, "value")})
+    stat = DC_NOERR
+    cause_c = ''
+
+    ! 操作対象決定
+    if (present(history)) then
+      hst => history
+    else
+      hst => default
+    endif
+
+#ifdef LIB_MPI
+    if ( hst % mpi_gather .and. &
+      & .not. hst % mpi_fileinfo % already_output ) then
+
+      call MessageNotify('W', subname, &
+        & 'Specify data of axes in whole area by "HistoryPutAxisMPI" explicitly ' // &
+        & 'before "call HistoryAddAttr".' )
+      stat = HST_EMPINOAXISDATA
+      cause_c = ''
+      goto 999
+    end if
+
+    if ( .not. hst % mpi_gather &
+      &  .or. ( hst % mpi_gather .and. hst % mpi_myrank == 0 ) ) then
+#endif
+
+    if (varname == "") then
+      ! とりあえず無駄だが大域属性を何度もつける
+      do, v_ord = 1, size(hst % vars)
+        call Put_Attr(hst % vars(v_ord), GT_PLUS // attrname, #{Num2Array(type, "value")})
+      enddo
+    else
+      call lookup_var_or_dim( hst, varname, var, err_not_found )
+      if ( .not. err_not_found ) then
+        call Put_Attr(var, attrname, #{Num2Array(type, "value")})
+      else
+        stat = NF90_ENOTVAR
+        cause_c = 'varname="' // trim(varname) // '" is not found'
+        goto 999
+      endif
+    endif
+
+#ifdef LIB_MPI
+    end if
+#endif
+
+999 continue
+    call StoreError(stat, subname, err, cause_c=cause_c)
+    call EndSub(subname)
+  end subroutine HistoryAddAttr#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

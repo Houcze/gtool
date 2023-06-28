@@ -1,0 +1,42 @@
+#= gtool_historyauto のテスト用 NAMELIST ファイル
+#= NAMELIST file for test of "gtool_historyauto"
+#
+# Authors::   Yasuhiro MORIKAWA
+# Version::   $Id: histauto2_nml08.nml,v 1.1 2009-10-11 03:55:56 morikawa Exp $
+# Tag Name::  $Name:  $
+# Copyright:: Copyright (C) GFD Dennou Club, 2008. All rights reserved. 
+# License::   See COPYRIGHT[link:../../COPYRIGHT]
+#
+&gtool_historyauto_nml
+  IntValue   = 1.0, 
+  IntUnit    = 'sec', 
+/
+&gtool_historyauto_nml
+  Name = 'u1', 
+  File = 'xhistauto2/test08-u.nc',
+  SpaceAverage = .true.
+/
+&gtool_historyauto_nml
+  Name = 'u2', 
+  File = 'xhistauto2/test08-u.nc',
+  SpaceAverage = .false., .true.
+/
+&gtool_historyauto_nml
+  Name = 'v', 
+  SpaceAverage = .true., .true., .true.
+/
+&gtool_historyauto_nml
+  Name = 'w1', 
+  File = 'xhistauto2/test08-w.nc',
+  SliceStart   =  1,  1, 3,
+  SliceEnd     = -1, -1, 6,
+  SliceStride  =  2,  1, 1,
+  SpaceAverage = .true., .true., .true.
+/
+&gtool_historyauto_nml
+  Name = 'w2', 
+  File = 'xhistauto2/test08-w.nc',
+  SliceStart   =  1,  1, 3,
+  SliceEnd     = -1, -1, 6,
+  SliceStride  =  2,  1, 1
+/

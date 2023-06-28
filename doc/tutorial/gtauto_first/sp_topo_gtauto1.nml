@@ -1,0 +1,7 @@
+&gtool_historyauto_nml
+  IntValue = 1.0,             ! 出力間隔の数値
+  IntUnit = 'day'             ! 出力間隔の単位
+/
+&gtool_historyauto_nml
+  Name = 'u, v, h, zeta'  ! 出力変数
+/

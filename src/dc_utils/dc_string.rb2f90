@@ -1,0 +1,1280 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+require("optparse")
+#
+# "dc_string.f90" Generator with Ruby.
+#
+opt = OptionParser.new
+opt.on('--toarray_max=VAL') {|v| $toarray_max = v.to_i}
+opt.on('--max_dim=VAL') {|v| $max_dim = v.to_i}
+opt.parse!(ARGV)
+$toarray_max = 12 unless $toarray_max
+$toarray_max = 2 if $toarray_max < 2
+$max_dim = 7 unless $max_dim
+$max_dim = 7 if $max_dim < 7
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= 文字型変数の操作
+!
+!= character type support routines
+!
+! Authors::   Yasuhiro MORIKAWA, Eizi TOYODA
+! Version::   $Id: dc_string.rb2f90,v 1.3 2009-10-12 06:47:57 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2000-2005. All rights reserved.
+! License::   See COPYRIGHT[link:../../COPYRIGHT]
+!
+
+module dc_string
+  !
+  != 文字型変数の操作
+  !
+  != character type support routines
+  !
+  ! <b>Note that Japanese and English are described in parallel.</b>
+  !
+  ! dc_string は文字列を操作するためのサブルーチン群を
+  ! 提供するモジュールです.
+  !
+  ! 'dc_string' module provides character type support routines
+  !
+  !== Procedures List
+  !
+  ! StoI           :: 文字型を整数型に変換
+  ! StoD           :: 文字型を倍精度実数型に変換
+  ! StoA           :: 文字型を文字型配列に変換
+  ! Get_Array      :: 文字型を整数型配列、単精度実数型配列、倍精度実数型配列に変換
+  ! Str_to_Logical :: 文字型を論理型に変換
+  ! toChar         :: 数値型、論理型を文字型に変換
+  ! Split          :: 文字列の分割
+  ! JoinChar       :: 文字型配列の連結
+  ! Concat         :: 文字型配列の末尾に文字を連結
+  ! Index_Ofs      :: オフセット文字列中の文字部分列の開始位置を探査. (Index 関数の拡張版)
+  ! Replace        :: 文字列置換
+  ! toUpper        :: 文字列を大文字へ変換 (サブルーチン)
+  ! UChar          :: 文字列を大文字へ変換 (関数)
+  ! toLower        :: 文字列を小文字へ変換 (サブルーチン)
+  ! LChar          :: 文字列を小文字へ変換 (関数)
+  ! StriEq         :: 文字列の比較 (大文字小文字を無視)
+  ! StrHead        :: 文字列の比較 (先頭部分のみの比較)
+  ! StrInclude     :: 文字型配列内の検査
+  ! CPrintf        :: データを整形して文字列として返す
+  ! Printf         :: データを整形して出力
+  ! PutLine        :: 数値型配列の要約を印字
+  ! RoundNum       :: 端数の整形処理
+  !------------    :: ------------
+  ! StoI           :: Convert character type into integer type
+  ! StoD           :: Convert character type into double precision real type
+  ! StoA           :: Convert character type into character type array
+  ! Get_Array      :: Convert character type into integer type array, or
+  !                   single precision real type array, or 
+  !                   double precision real type array
+  ! Str_to_Logical :: Convert character type into logical type
+  ! toChar         :: Convert numerical types or logical type
+  !                   into character type
+  ! Split          :: Split character type
+  ! JoinChar       :: Join characters in character type array, and 
+  !                   convert them into character type variable
+  ! Concat         :: Concatenate character type to end of character type array
+  ! Index_Ofs      :: Search start position of partial character on offset character (extended 'index' function)
+  ! Replace        :: Replace character
+  ! toUpper        :: Uppercase character (Subroutine)
+  ! UChar          :: Uppercase character (Function)
+  ! toLower        :: Lowercase character (Subroutine)
+  ! LChar          :: Lowercase character (Function)
+  ! StriEq         :: Compare two characters (not case-sensitive)
+  ! StrHead        :: Compare headers of two characters
+  ! StrInclude     :: Search in character type array
+  ! CPrintf        :: Format an return data
+  ! Printf         :: Format an print data
+  ! PutLine        :: Print summary of numerical array
+  ! RoundNum       :: Form about fraction
+
+  use dc_types, only: TOKEN, STRING, DP
+  implicit none
+  private
+
+  !-------------------------------------
+  !  文字から数値への変換
+  public:: StoI
+  interface StoI
+    module procedure atoi_scalar
+  end interface
+
+  public:: StoD
+  interface StoD
+    module procedure atod_scalar
+  end interface
+
+  public:: get_array
+  interface get_array
+    module procedure str2ip
+    module procedure str2rp
+    module procedure str2dp
+  end interface
+
+  public:: Str_to_Logical
+  interface Str_to_Logical
+    module procedure str2bool
+  end interface
+
+  !-------------------------------------
+  !  数値から文字への変換
+  public:: toChar
+  interface toChar
+    module procedure itoa_scalar
+    module procedure itoa_array
+    module procedure rtoa_scalar
+    module procedure rtoa_array
+    module procedure dtoa_scalar
+    module procedure dtoa_array
+    module procedure ltoa_scalar
+    module procedure ltoa_array
+  end interface
+
+  !-------------------------------------
+  !  数値表記の文字列の端数除去
+  public:: RoundNum
+  interface RoundNum
+    module procedure RoundNum
+  end interface
+
+  !-------------------------------------
+  !  文字型配列の連結
+  public:: JoinChar
+
+  !-------------------------------------
+  !  文字型配列の末尾に文字を連結
+  public:: Concat
+  interface Concat
+    module procedure concat_tail
+  end interface
+
+
+
+  !-------------------------------------
+  !  長さの異なる文字群の配列化
+  public :: StoA
+  interface StoA
+#{forloop("\\$num\\$", 1, $toarray_max, %Q{
+    module procedure Str_to_Array$num$
+})}
+  end interface
+
+  !-------------------------------------
+  !  文字列の分解
+  public Split
+  interface Split
+    module procedure Split_CC
+  end interface
+
+  !-------------------------------------
+  !  文字列の解析
+  public:: Index_Ofs
+  interface Index_Ofs
+    module procedure Index_Ofs
+  end interface
+
+  public:: Replace
+  interface Replace
+    module procedure Replace
+  end interface
+
+  !-------------------------------------
+  !  大文字・小文字を無視した処理
+  public:: toUpper
+  interface toUpper
+    module procedure cupper
+  end interface
+
+  public:: toLower
+  interface toLower
+    module procedure clower
+  end interface
+
+  public:: UChar
+  interface UChar
+    module procedure UChar
+  end interface
+
+  public:: LChar
+  interface LChar
+    module procedure LChar
+  end interface
+
+  public:: StriEq
+  interface StriEq
+    module procedure StriEq_cc
+  end interface
+
+  public:: StrHead
+  interface StrHead
+    module procedure strhead_cc
+  end interface
+
+  public:: StrInclude
+  interface StrInclude
+    module procedure str_include_ac
+  end interface
+
+  !-------------------------------------
+  !  印字のための文字処理
+  public:: GTStringQuoteForDcl
+  interface
+    function GTStringQuoteForDcl(string) result(result)
+      use dc_types, only: STRLEN => STRING
+      character(*), intent(in):: string
+      character(STRLEN):: result
+    end function GTStringQuoteForDcl
+  end interface
+
+  public:: CPrintf
+  interface CPrintf
+
+    function DCStringCPrintf(fmt, i, r, d, L, n, c1, c2, c3, ca) result(result)
+      use dc_types, only: STRING, DP
+      character(len = STRING):: result
+      character(*), intent(in):: fmt
+      integer, intent(in), optional:: i(:), n(:)
+      real, intent(in), optional:: r(:)
+      real(DP), intent(in), optional:: d(:)
+      logical, intent(in), optional:: L(:)
+      character(*), intent(in), optional:: c1, c2, c3
+      character(*), intent(in), optional:: ca(:)
+    end function DCStringCPrintf
+
+  end interface
+
+  public:: Printf
+  interface Printf
+
+    subroutine DCStringSPrintf(unit, fmt, i, r, d, L, n, c1, c2, c3, ca)
+      use dc_types, only: DP
+      character(*), intent(out):: unit
+      character(*), intent(in):: fmt
+      integer, intent(in), optional:: i(:), n(:)
+      real, intent(in), optional:: r(:)
+      real(DP), intent(in), optional:: d(:)
+      logical, intent(in), optional:: L(:)
+      character(*), intent(in), optional:: c1, c2, c3
+      character(*), intent(in), optional:: ca(:)
+    end subroutine DCStringSPrintf
+
+    subroutine DCStringFPrintf(unit, fmt, i, r, d, L, n, c1, c2, c3, ca)
+      use dc_types, only: DP
+      integer, intent(in), optional:: unit
+      character(*), intent(in):: fmt
+      integer, intent(in), optional:: i(:), n(:)
+      real, intent(in), optional:: r(:)
+      real(DP), intent(in), optional:: d(:)
+      logical, intent(in), optional:: L(:)
+      character(*), intent(in), optional:: c1, c2, c3
+      character(*), intent(in), optional:: ca(:)
+    end subroutine DCStringFPrintf
+
+  end interface
+
+  !-------------------------------------
+  !  数値型配列の要約印字
+  public:: PutLine
+  interface PutLine
+
+__EndOfFortran90Code__
+
+                   types = ["Int", "Real", "Double"]
+types.each{ |type|
+for num in 1..$max_dim
+print <<"__EndOfFortran90Code__"
+
+    subroutine PutLine#{type}#{num}( array, lbounds, ubounds, unit, indent, sd  )
+      use dc_types, only: DP
+      #{$type_intent_in[type]}, intent(in):: array#{array_colon("#{num}")}
+      integer, intent(in), optional:: lbounds(#{num})
+      integer, intent(in), optional:: ubounds(#{num})
+      integer, intent(in), optional:: unit
+      character(*), intent(in), optional:: indent
+      logical, intent(in), optional:: sd
+    end subroutine PutLine#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+contains
+
+  logical function strhead_cc(whole, head) result(result)
+    !
+    ! 文字列 head と文字列 whole の先頭部分 (head と同じ文字列長)
+    ! とを比較し、同じものならば .true. を、異なる場合には .false.
+    ! を返します。 whole の文字列長が head の文字列長よりも短い場合には
+    ! .false. を返します。
+    !
+    character(len = *), intent(in):: whole
+    character(len = *), intent(in):: head
+  continue
+    result = (len(whole) >= len(head))
+    if (.not. result) return
+    result = (whole(1:len(head)) == head)
+  end function strhead_cc
+
+  logical function StriEq_cc(string_a, string_b) result(result)
+    !
+    ! 大文字・小文字を無視して文字列の比較を行います。
+    ! 文字列 string_a と文字列 string_b を比較し、同じものならば
+    ! .true. を、異なる場合には .false. を返します。
+    !
+    !--
+    ! ※ 注意書き ※
+    !
+    ! コンパイラによっては character(len = len(string_a)):: abuf
+    ! が通らないため, 文字数を dc_types で提供される種別型
+    ! パラメタ STRING で制限
+    !++
+    !
+    character(len = *), intent(in):: string_a
+    character(len = *), intent(in):: string_b
+    character(len = STRING):: abuf
+    character(len = STRING):: bbuf
+    abuf = string_a
+    bbuf = string_b
+    call toUpper(abuf)
+    call toUpper(bbuf)
+    result = (abuf == bbuf)
+  end function StriEq_cc
+
+  logical function str_include_ac( &
+    & carray, string, ignore_space, ignore_case ) result(result)
+    !
+    ! 文字型配列引数 *carray* が文字型引数 *string* と等しい要素を持つ場合に
+    ! .true. を返します.
+    ! 
+    ! 文字列の前後の空白は無視されます. 
+    ! オプショナル引数 *ignore_space* に .false. を
+    ! 与えた場合には文字列先頭の空白を無視しません. 
+    !
+    ! オプショナル引数 *ignore_case* に .true. を与えた場合には
+    ! 大文字, 小文字の違いを無視して比較します. 
+    !
+    ! If an character array argument *carray* has the same 
+    ! as character argument *string*, ".true." is returned. 
+    ! 
+    ! And beginning and trailing spaces are ignored.
+    ! If ".false." is given to an optional argument *ignore_space*, 
+    ! beginning spaces are not ignored. 
+    !
+    ! If ".true." is given to an optional argument *ignore_case*, 
+    ! this function ignores case. 
+    !
+    character(*), intent(in):: carray(:)
+    character(*), intent(in):: string
+    logical, intent(in), optional:: ignore_space
+    logical, intent(in), optional:: ignore_case
+    integer:: array_size, i
+    logical:: ignore_space_work, ignore_case_work
+  continue
+    ignore_space_work = .true.
+    if ( present(ignore_space) ) then
+      if ( .not. ignore_space ) then
+        ignore_space_work = .false.
+      end if
+    end if
+
+    ignore_case_work = .false.
+    if ( present(ignore_case) ) then
+      if ( ignore_case ) then
+        ignore_case_work = .true.
+      end if
+    end if
+
+    array_size = size(carray)
+    do i = 1, array_size
+      if ( ignore_space_work ) then
+        if ( ignore_case_work ) then
+          result = &
+            & StriEq_cc( trim( adjustl( carray(i) ) ), &
+            &            trim( adjustl( string    ) ) )
+        else
+          result = &
+            & ( trim( adjustl( carray(i) ) ) == trim( adjustl( string ) ) )
+        end if
+
+      else
+        if ( ignore_case_work ) then
+          result = &
+            & StriEq_cc( trim( carray(i) ), trim( string ) )
+        else
+          result = ( trim(carray(i)) == trim(string) )
+        end if
+      end if
+      if (result) return
+    end do
+  end function str_include_ac
+
+  logical function str2bool(string) result(result)
+    !
+    ! string で与えられる文字型変数を論理型にして返します。 string 
+    ! が空、 または 0、 0.0、 0.0D0、 0.0d0、 .false.、 .FALSE.、 f、
+    ! F、 false、 FALSE の場合には <tt>.false.</tt> が返ります。
+    ! それ以外の場合には <tt>.true.</tt> が返ります。
+    !
+    character(len = *), intent(in):: string
+  continue
+    select case(string)
+    case ("", "0", "0.0", "0.0D0", "0.0d0", ".false.", ".FALSE.", &
+            & "f", "F", "false", "FALSE")
+      result = .false.
+    case default
+      result = .true.
+    end select
+  end function str2bool
+
+  integer function atoi_scalar(string, default) result(result)
+    !
+    ! string で与えられる文字型変数を、整数型変数にして返します。
+    ! もしも string が数値に変換できない場合、default が返ります。
+    ! default を指定しない場合は 0 が返ります。
+    !
+    character(len = *), intent(in):: string
+    integer, intent(in), optional:: default
+    integer:: ios
+  continue
+    read(unit=string, fmt="(i80)", iostat=ios) result
+    if (ios /= 0) then
+      if (present(default)) then
+        result = default
+      else
+        result = 0
+      endif
+    endif
+  end function atoi_scalar
+
+  real(DP) function atod_scalar(string) result(result)
+    !
+    ! string で与えられる文字型変数を、倍精度実数型変数にして返します。
+    ! もしも string が数値に変換できない場合、0.0 が返ります。
+    !
+    use dc_types, only: STRING_LEN => STRING
+    character(len = *), intent(in):: string
+    integer:: ios
+    character(len = STRING_LEN):: buffer
+    integer:: ipoint, iexp
+    intrinsic scan
+  continue
+    buffer = string
+    ! もし整定数をいれてしまった場合は小数点を附加
+    if (index(buffer, '.') == 0) then
+      iexp = scan(buffer, "eEdD")
+      if (iexp /= 0) then
+        buffer(iexp+1: len(buffer)) = buffer(iexp: len(buffer)-1)
+        ipoint = iexp
+      else
+        ipoint = len_trim(buffer) + 1
+      endif
+      buffer(ipoint: ipoint) = '.'
+    endif
+    read(unit=buffer, fmt="(g80.10)", iostat=ios) result
+    if (ios /= 0) result = 0.0
+  end function atod_scalar
+
+  subroutine str2ip(int_ptr, string)
+    !
+    ! string で与えられる文字型変数をカンマ「,」で区切り、
+    ! 整数型配列ポインタ int_ptr(:) にして返します。 int_ptr(:)
+    ! の配列サイズは string の内容に応じて自動的に決まります。
+    !
+    ! ただし、int_ptr(:) は必ず空状態または不定状態で与えてください。
+    ! 既に割り付けられている場合、メモリリークを起こします。
+    !
+    integer, pointer:: int_ptr(:) !(out)
+    character(len = *), intent(in):: string
+    integer:: i, j, idx, nvalues
+  continue
+    nvalues = 1
+    i = 1
+    do
+      idx = index(string(i: ), ',')
+      if (idx == 0) exit
+      i = i + idx - 1 + 1 
+      nvalues = nvalues + 1
+    enddo
+    allocate(int_ptr(nvalues))
+    i = 1
+    j = 1
+    do
+      idx = index(string(i: ), ',')
+      if (idx == 0) then
+        int_ptr(j) = stoi(string(i: ))
+        exit
+      endif
+      int_ptr(j) = stod(string(i: i+idx-2))
+      i = i + idx - 1 + 1 
+      j = j + 1
+    enddo
+  end subroutine str2ip
+
+  subroutine str2rp(real_ptr, string)
+    !
+    ! string で与えられる文字型変数をカンマ「,」で区切り、
+    ! 単精度実数型配列ポインタ real_ptr(:) にして返します。
+    ! real_ptr(:) の配列サイズは string の内容に応じて自動的に決まります。
+    !
+    ! ただし、real_ptr(:) は必ず空状態または不定状態で与えてください。
+    ! 既に割り付けられている場合、メモリリークを起こします。
+    !
+    real, pointer:: real_ptr(:) !(out)
+    character(len = *), intent(in):: string
+    integer:: i, j, idx, nvalues
+  continue
+    nvalues = 1
+    i = 1
+    do
+      idx = index(string(i: ), ',')
+      if (idx == 0) exit
+      i = i + idx - 1 + 1 
+      nvalues = nvalues + 1
+    enddo
+    allocate(real_ptr(nvalues))
+    i = 1
+    j = 1
+    do
+      idx = index(string(i: ), ',')
+      if (idx == 0) then
+        real_ptr(j) = stod(string(i: ))
+        exit
+      endif
+      real_ptr(j) = stod(string(i: i+idx-2))
+      i = i + idx - 1 + 1 
+      j = j + 1
+    enddo
+  end subroutine str2rp
+
+  subroutine str2dp(real_ptr, string)
+    !
+    ! string で与えられる文字型変数をカンマ「,」で区切り、
+    ! 倍精度実数型配列ポインタ real_ptr(:) にして返します。
+    ! real_ptr(:) の配列サイズは string の内容に応じて自動的に決まります。
+    !
+    ! ただし、real_ptr(:) は必ず空状態または不定状態で与えてください。
+    ! 既に割り付けられている場合、メモリリークを起こします。
+    !
+    real(DP), pointer:: real_ptr(:) !(out)
+    character(len = *), intent(in):: string
+    integer:: i, j, idx, nvalues
+  continue
+    nvalues = 1
+    i = 1
+    do
+      idx = index(string(i: ), ',')
+      if (idx == 0) exit
+      i = i + idx - 1 + 1 
+      nvalues = nvalues + 1
+    enddo
+    allocate(real_ptr(nvalues))
+    i = 1
+    j = 1
+    do
+      idx = index(string(i: ), ',')
+      if (idx == 0) then
+        real_ptr(j) = stod(string(i: ))
+        exit
+      endif
+      real_ptr(j) = stod(string(i: i+idx-2))
+      i = i + idx - 1 + 1 
+      j = j + 1
+    enddo
+  end subroutine str2dp
+
+  !== 数値型、論理型から文字型への変換
+  !
+  ! 総称名称 toChar として呼び出される関数群
+  !
+  character(TOKEN) function itoa_scalar(i) result(result)
+    !
+    ! 整数型変数 i で与えられる数値を文字型変数にして返します。
+    ! 配列が与えられる場合、各要素をカンマと空白「<tt>, </tt>」
+    ! で区切って返します。
+    !
+    integer, intent(in):: i
+    character(len = 32):: buffer
+  continue
+    write(unit=buffer, fmt="(i20)") i
+    result = adjustl(buffer)
+  end function itoa_scalar
+
+  character(STRING) function itoa_array(ibuf) result(result)
+    !
+    ! 整数型配列変数 ibuf(:) で与えられる数値を文字型変数にして返します。
+    ! 配列が与えられる場合、各要素をカンマと空白「<tt>, </tt>」
+    ! で区切って返します。
+    !
+    integer, intent(in):: ibuf(:)
+    integer:: i
+  continue
+    if (size(ibuf) <= 0) then
+      result = ""
+      return
+    endif
+    result = toChar(ibuf(1))
+    do, i = 2, size(ibuf)
+      result = trim(result) // ", " // trim(toChar(ibuf(i)))
+    enddo
+  end function itoa_array
+
+  character(TOKEN) function rtoa_scalar(x) result(result)
+    !
+    ! 単精度実数型変数 x で与えられる数値を文字型変数にして返します。
+    ! 配列が与えられる場合、各要素をカンマと空白「<tt>, </tt>」
+    ! で区切って返します。
+    !
+    real, intent(in):: x
+    character(len = 16):: buffer, expbuf
+    integer:: ptr, eptr
+  continue
+    write(unit=buffer, fmt="(g16.8)") x
+    eptr = scan(buffer, "eE", back=.true.)
+    expbuf = ''
+    if (eptr > 1) then
+      expbuf = buffer(eptr: )
+      buffer(eptr: ) = " "
+    end if
+
+    ptr = verify(buffer, " 0", back=.true.)
+    if (ptr > 0) buffer(ptr+1: ) = " "
+
+    if (eptr > 1) then
+      buffer = buffer(1:len_trim(buffer)) // expbuf
+    end if
+    result = adjustl(buffer)
+  end function rtoa_scalar
+
+  character(STRING) function rtoa_array(rbuf) result(result)
+    !
+    ! 単精度実数型配列 rbuf(:)、で与えられる数値を文字型変数にして返します。
+    ! 配列が与えられる場合、各要素をカンマと空白「<tt>, </tt>」
+    ! で区切って返します。
+    !
+    real, intent(in):: rbuf(:)
+    integer:: i
+  continue
+    if (size(rbuf) <= 0) then
+      result = ""
+      return
+    endif
+    result = toChar(rbuf(1))
+    do, i = 2, size(rbuf)
+      result = trim(result) // ", " // trim(toChar(rbuf(i)))
+    enddo
+  end function rtoa_array
+
+  character(TOKEN) function dtoa_scalar(d) result(result)
+    !
+    ! 倍精度実数型変数 d で与えられる数値を文字型変数にして返します。
+    ! 配列が与えられる場合、各要素をカンマと空白「<tt>, </tt>」
+    ! で区切って返します。
+    !
+    real(DP), intent(in):: d
+    character(len = 32):: buffer, expbuf
+    integer:: ptr, eptr
+  continue
+    write(unit=buffer, fmt="(g32.24)") d
+    eptr = scan(buffer, "eE", back=.true.)
+    expbuf = ''
+    if (eptr > 1) then
+      expbuf = buffer(eptr: )
+      buffer(eptr: ) = " "
+    end if
+
+    ptr = verify(buffer, " 0", back=.true.)
+    if (ptr > 0) buffer(ptr+1: ) = " "
+
+    if (eptr > 1) then
+      buffer = buffer(1:len_trim(buffer)) // expbuf
+    end if
+    result = adjustl(buffer)
+  end function dtoa_scalar
+
+  character(STRING) function dtoa_array(dbuf) result(result)
+    !
+    ! 倍精度実数型配列 dbuf(:) で与えられる数値を文字型変数にして返します。
+    ! 配列が与えられる場合、各要素をカンマと空白「<tt>, </tt>」
+    ! で区切って返します。
+    !
+    real(DP), intent(in):: dbuf(:)
+    integer:: i
+  continue
+    if (size(dbuf) <= 0) then
+      result = ""
+      return
+    endif
+    result = toChar(dbuf(1))
+    do, i = 2, size(dbuf)
+      result = trim(result) // ", " // trim(toChar(dbuf(i)))
+    enddo
+  end function dtoa_array
+
+  character(TOKEN) function ltoa_scalar(l) result(result)
+    !
+    ! 論理型変数 l で与えられる数値を文字型変数にして返します。
+    ! 配列が与えられる場合、各要素をカンマと空白「<tt>, </tt>」
+    ! で区切って返します。
+    !
+    logical, intent(in):: l
+  continue
+    if (l) then
+      result = ".true."
+    else
+      result = ".false."
+    end if
+  end function ltoa_scalar
+
+  character(STRING) function ltoa_array(lbuf) result(result)
+    !
+    ! 論理型配列 lbuf(:) で与えられる数値を文字型変数にして返します。
+    ! 配列が与えられる場合、各要素をカンマと空白「<tt>, </tt>」
+    ! で区切って返します。
+    !
+    logical, intent(in):: lbuf(:)
+    integer:: i
+  continue
+    if (size(lbuf) <= 0) then
+      result = ""
+      return
+    endif
+    result = toChar(lbuf(1))
+    do, i = 2, size(lbuf)
+      result = trim(result) // ", " // trim(toChar(lbuf(i)))
+    enddo
+  end function ltoa_array
+
+  !-------------------------------------------------------------------
+  !  文字配列の連結
+  !-------------------------------------------------------------------
+
+  character(STRING) function JoinChar(carray, expr) result(result)
+    !
+    ! 文字型配列 carray に与えた複数の文字列をカンマと空白
+    ! 「<tt>, </tt>」 で区切った1つの文字列にして返します。
+    ! expr に文字列を与えると、その文字列を区切り文字として用います。
+    !
+    implicit none
+    character(*)     , intent(in)           :: carray(:)
+    character(*)     , intent(in), optional :: expr
+
+    character(2)     ,parameter :: default = ', '
+    character(STRING)           :: delimiter
+    integer                     :: dellen, i
+  continue
+    if ( present(expr) ) then
+      delimiter = expr
+      dellen = len(expr)
+    else
+      delimiter = default
+      dellen = len(default)
+    endif
+    if (size(carray) <= 0) then
+      result = ""
+      return
+    endif
+    result = trim(carray(1))
+    do, i = 2, size(carray)
+      result = trim(result) // delimiter(1:dellen) // trim(carray(i))
+    enddo
+  end function JoinChar
+
+
+  subroutine concat_tail(carray, str, result)
+    !
+    ! 文字型配列 *carray* の各成分の末尾に *str* を追加して
+    ! *result* に返します。*carray* の各成分の末尾の空白は無視されます。
+    !
+    ! result(:) の配列サイズは carray のサイズに応じて自動的に決まります。
+    ! ただし、result(:) は必ず空状態または不定状態で与えてください。
+    ! 既に割り付けられている場合、メモリリークを起こします。
+    !
+    implicit none
+    character(*), intent(in)  :: carray(:)
+    character(*), intent(in)  :: str
+    character(STRING), pointer:: result(:) ! (out)
+    integer                     :: i, size_carray
+  continue
+    size_carray = size(carray)
+    allocate(result(size_carray))
+
+    do i = 1, size_carray
+      result(i) = trim(carray(i)) // str
+    end do
+
+  end subroutine concat_tail
+
+
+__EndOfFortran90Code__
+
+def CharArgs(num)
+  number = num.to_i
+  return "" if number < 1
+  body = "c1"
+  return body if number < 2
+  for i in 2..number
+    body << ", c" + i.to_s
+  end
+  return body
+end
+
+for num in 1..$toarray_max
+print <<"__EndOfFortran90Code__"
+
+  function Str_to_Array#{num}(#{CharArgs(num)}) result(result)
+    !
+    ! 異なる長さの複数の文字型変数を 1 つの文字型配列に変換します。
+    !
+    ! 1 から #{$toarray_max} 個までの引数を与えることが可能です。
+    !
+    character(*), intent(in) :: #{CharArgs(num)}
+    character(STRING) :: result(#{num})
+
+  continue
+#{forloop("\\$num\\$", 1, num, %Q{
+    result($num$) = c$num$
+})}
+  end function Str_to_Array#{num}
+
+__EndOfFortran90Code__
+end
+undef CharArgs
+
+print <<"__EndOfFortran90Code__"
+
+
+  !-------------------------------------------------------------------
+  !  文字列の分解
+  !-------------------------------------------------------------------
+
+  subroutine Split_CC(str, carray, sep, limit)
+    !
+    ! *str* で与えられた文字列を 文字列 *sep* で分解し,
+    ! ポインタ配列 *carray* に返します.
+    ! *carray* は必ず空状態にして与えてください. 割り付け状態の
+    ! 場合にはエラーを返します. 
+    !
+    ! *limit* に正の数を与えた場合, 最大 *limit* 個のフィールドに分割
+    ! します.  負の数や 0 の場合は省略した場合と同じになります.  *str* 
+    ! の末尾の空白は除去されます.  *sep* に空文字を代入する場合, 空白
+    ! 文字で分割されます.
+    !
+    use dc_types, only: STRING
+    implicit none
+    character(*), intent(in):: str
+    character(*), pointer:: carray(:) !(out)
+    character(*), intent(in):: sep
+    integer, intent(in), optional:: limit
+    integer :: num, cur, i, limitnum
+    character(STRING) :: substr
+    logical :: end_flag
+  continue
+    if (present(limit)) then
+      if (limit > 0) then
+        limitnum = limit
+      else
+        limitnum = 0
+      end if
+    else
+      limitnum = 0
+    end if
+
+    if (len(trim(sep)) == 0) then
+      num = 1
+      substr = str
+      ! 重複して無駄だが carray を allocate するため, 何分割するか
+      ! 調べ, num に格納する.
+      do
+        cur = index(trim(substr), ' ')
+        if (cur == 0) exit
+        num = num + 1
+        substr = adjustl(substr(cur + len(sep) :len(substr)))
+      end do
+
+      if (limitnum /= 0 .and. num > limitnum) num = limitnum
+      allocate(carray(num))
+
+      substr = str
+      end_flag = .false.
+      do i = 1, num
+        cur = index(trim(substr), ' ')
+        if (cur == 0 .or. i == num) end_flag = .true.
+        if (end_flag) then
+          carray(i) = substr
+          exit
+        else
+          carray(i) = substr(1:cur - 1)
+        end if
+        substr = adjustl(substr(cur + len(sep) :len(substr)))
+      end do
+
+    else
+      num = 1
+      substr = str
+      ! 重複して無駄だが carray を allocate するため, 何分割するか
+      ! 調べ, num に格納する.
+      do
+        cur = index(substr, trim(sep))
+        if (cur == 0) exit
+        num = num + 1
+        substr = substr(cur + len(sep) :len(substr))
+      end do
+
+      if (limitnum /= 0 .and. num > limitnum) num = limitnum
+      allocate(carray(num))
+
+      substr = str
+      end_flag = .false.
+      do i = 1, num
+        cur = index(substr, trim(sep))
+        if (cur == 0 .or. i == num) end_flag = .true.
+        if (end_flag) then
+          carray(i) = substr
+          exit
+        else
+          carray(i) = substr(1:cur - 1)
+        end if
+        substr = substr(cur + len(sep) :len(substr))
+      end do
+    end if
+
+    return
+
+  end subroutine Split_CC
+
+
+  !-------------------------------------------------------------------
+  !  文字列の解析
+  !-------------------------------------------------------------------
+
+  integer function Index_Ofs(string, start, substr) result(result)
+    !
+    ! 文字列 string の start 文字目以降の文字列の中に substr
+    ! の文字列が含まれている時、その開始文字位置を返します。
+    ! 含まれない場合は 0 を返します。
+    ! 返される開始文字位置は文字列 string の先頭から数えます。
+    !
+    character(len = *), intent(in):: string
+    integer, intent(in):: start
+    character(len = *), intent(in):: substr
+    intrinsic index
+    if (start < 1) then
+      result = 0
+      return
+    endif
+    result = index(string(start: ), substr)
+    if (result == 0) return
+    result = start + result - 1
+  end function Index_Ofs
+
+  recursive function Replace( &
+    & string, from, to, recursive, start_pos ) result(result)
+    !
+    ! 文字列 *string* に文字列 *from* が含まれる場合, その部分を文字列 *to*
+    ! に置換して返します. 文字列 *from* が含まれない場合は *string*
+    ! をそのまま返します. *from* が複数含まれる場合, 先頭の *from*
+    ! のみが置換されます.
+    !
+    ! 全ての *from* を *to* へ変換したい場合には, 
+    ! オプショナル引数 *recursive* に .true. を与えてください. 
+    !
+    ! デフォルトでは, 文字列の最初から検索を行います. 
+    ! オプショナル引数 *start_pos* を与える場合, 
+    ! *start_pos* 文字目から検索を行います. 
+    !
+    ! If a string *from* is included in *string*, the string is 
+    ! replace to *to*, and the replaced string is returned. 
+    ! If a string *from* is not included, *string* is returned 
+    ! without change. 
+    ! When multiple *from* are included, only first *from* is replaced. 
+    !
+    ! In order to replace all *from* to *to*, give ".true." to 
+    ! optional argument *recursive*. 
+    !
+    ! By default, the string is searched from the top. 
+    ! If optional argument *start_pos* is given, 
+    ! the search is started from *start_pos*. 
+    !
+    use dc_types, only: STRLEN => STRING
+    implicit none
+    character(STRLEN):: result
+    character(*), intent(in):: string, from, to
+    logical, intent(in), optional:: recursive
+    integer, intent(in), optional:: start_pos
+    integer:: sp
+    integer:: i, isa, isb, iea, ieb
+    integer:: ir
+  continue
+    if ( present(start_pos) ) then
+      sp = start_pos
+    else
+      sp = 1
+    end if
+    if ( sp < 1 ) then
+      sp = 1
+    end if
+
+    result = string
+    i = index(result(sp:), from)
+    if (i == 0) return
+    i = i + sp - 1
+    isa = i + len(from)
+    isb = i + len(to)
+    if (len(to) < len(from)) then
+      iea = len(result)
+      ieb = len(result) + len(to) - len(from)
+    else
+      iea = len(result) + len(from) - len(to)
+      ieb = len(result)
+    endif
+    if (len(to) /= len(from)) result(isb:ieb) = result(isa:iea)
+    result(i:i+len(to)-1) = to
+
+    !-----------------------------------
+    !  再帰的処理
+    !  Recursive process
+    ir = index(result(i+len(to):), from)
+    if ( len_trim(from) == 0 ) then
+      ir = index(trim(result(i+len(to):)), from)
+    end if
+    if (ir /= 0) then
+      if ( present(recursive) ) then
+        if ( recursive ) then
+          result = Replace( string = result, &
+            &               from = from, to = to, &
+            &               recursive = recursive, &
+            &               start_pos = i+len(to) )
+        end if
+      end if
+    end if
+
+  end function Replace
+
+  !-------------------------------------------------------------------
+  !  大文字・小文字を無視した処理
+  !-------------------------------------------------------------------
+
+  subroutine cupper(ch)
+    !
+    ! 文字列 ch に英字が含まれる場合、その英字を大文字に変換して ch
+    ! に返します。 英字でない文字や既に大文字になっている文字は
+    ! そのまま返します。
+    !
+    character(len = *), intent(inout):: ch
+    integer:: i, lch, idx
+  continue
+    lch = len(ch)
+    do, i = 1, lch
+      idx = ichar(ch(i:i))
+      if (97 <= idx .and. idx <= 122) then
+        ch(i:i)=char(idx - 32)
+      end if
+    end do
+  end subroutine cupper
+
+  subroutine clower(ch)
+    !
+    ! 文字列 ch に英字が含まれる場合、その英字を小文字に変換して ch
+    ! に返します。 英字でない文字や既に小文字になっている文字は
+    ! そのまま返します。
+    !
+    character(len = *), intent(inout):: ch
+    integer:: i, lch, idx
+  continue
+    lch = len(ch)
+    do, i = 1, lch
+      idx = ichar(ch(i:i))
+      if (65 <= idx .and. idx <= 90) then
+        ch(i:i)=char(idx + 32)
+      end if
+    end do
+  end subroutine clower
+
+  character(STRING) function UChar(ch) result(result)
+    !
+    ! 文字列 ch に英字が含まれる場合、その英字を大文字に変換して返します。
+    ! 英字でない文字や既に大文字になっている文字はそのまま返します。
+    !
+    character(len = *), intent(in):: ch
+  continue
+    result = ch
+    call toUpper(result)
+  end function UChar
+
+  character(STRING) function LChar(ch) result(result)
+    !
+    ! 文字列 ch に英字が含まれる場合、その英字を小文字に変換して返します。
+    ! 英字でない文字や既に小文字になっている文字はそのまま返します。
+    !
+    character(len = *), intent(in):: ch
+  continue
+    result = ch
+    call toLower(result)
+  end function LChar
+
+  character(STRING) function RoundNum(num) result(result)
+    !
+    ! '0.30000001' や '12.999998' などの丸め誤差によって端数が残って
+    ! しまっている数値表記を '0.3' や '13.' などに整形して返します. 
+    !
+    character(*), intent(in):: num
+    character(STRING):: nrv, enrv
+    integer:: i, moving_up, nrvi, dig, zero_stream
+  continue
+    !
+    ! 実数でないものについてはそのまま返す. 
+    ! 
+    if ( scan('.', trim(num) ) == 0  ) then
+      result = num
+      return
+    end if
+    nrv = num
+
+    !
+    ! 指数部を避けておく. 
+    ! 
+    enrv = ''
+    i = scan(nrv, "eE", back=.true.)
+    if ( i > 1  ) then
+      enrv = nrv(i:)
+      nrv(i:) = " "
+    elseif ( i == 1 ) then
+      result = nrv
+      return
+    end if
+
+    !
+    ! 0.30000001 などの末尾の 1 のような, ゴミの桁の数値を掃除し, 
+    ! 0.3000000 などに整形. 
+    !
+    if ( index( trim( nrv ), '.') - len_trim( nrv ) < -7 ) then
+      do while ( index('567890.', nrv(len_trim(nrv):len_trim(nrv)) ) == 0 )
+        if ( len_trim(nrv) < 2 ) exit
+        nrv = nrv(1:len_trim(nrv)-1)
+      end do
+    end if
+
+    !
+    ! 0.30000001986 などの末尾の 1 以降のゴミの桁の数値を掃除し, 
+    ! 0.3000000 などに整形. 
+    !
+    if ( index( trim( nrv ), '.') - len_trim( nrv ) < -7 ) then
+      dig = index( trim( nrv ), '.') + 1
+      zero_stream = 0
+      do while ( dig < len_trim( nrv ) )
+        if ( nrv(dig:dig) == "0" ) then
+          zero_stream = zero_stream + 1
+        else
+          zero_stream = 0
+        end if
+        if ( zero_stream > 7 ) then
+          nrv(dig:len_trim(nrv)) = '0'
+          exit
+        end if
+        dig = dig + 1
+      end do
+    end if
+
+    !
+    ! 0.3000000 などの末尾の 0 を掃除し, 
+    ! 0.3 などに整形. 
+    !
+    if ( index( trim( nrv ), '.') /= 0 ) then
+      do while ( index('123456789.', nrv(len_trim(nrv):len_trim(nrv)) ) == 0 )
+        if ( len_trim(nrv) < 2 ) exit
+        nrv = nrv(1:len_trim(nrv)-1)
+      end do
+    end if
+
+    !
+    ! 0.89999998 などの末尾の 8 のような, ゴミの桁の数値を掃除し, 
+    ! 0.8999999 などに整形. 
+    !
+    moving_up = 0
+    if ( index( trim( nrv ), '.') - len_trim( nrv ) < -7 ) then
+      do while ( index('12345690.', nrv(len_trim(nrv):len_trim(nrv)) ) == 0 )
+        if ( len_trim(nrv) < 2 ) exit
+        nrv = nrv(1:len_trim(nrv)-1)
+      end do
+      moving_up = 1
+    end if
+
+    !
+    ! 0.8999999 などの末尾の 9 を掃除し, 繰り上げて
+    ! 0.9 などに整形. 
+    !
+    if ( moving_up > 0 ) then
+      do while ( index('012345678.', nrv(len_trim(nrv):len_trim(nrv)) ) == 0 )
+        if ( len_trim(nrv) < 2 ) exit
+        nrv = nrv(1:len_trim(nrv)-1)
+      end do
+    end if
+
+    i = len_trim(nrv)
+    do while ( moving_up > 0 .and. i > 0 )
+      if ( index('.', nrv(i:i)) /= 0 ) then
+        i = i - 1
+        cycle
+      end if
+      nrvi = StoI( nrv(i:i) ) + moving_up
+
+      if ( nrvi < 10 ) then
+        nrv(i:i) = trim( toChar( nrvi ) )
+        exit
+      else
+        nrv(i:i) = '0'
+        if ( i < 2 ) then
+          nrv = '10'
+          exit
+        else
+          i = i - 1
+          cycle
+        end if
+      end if
+      if ( len_trim(nrv) < 2 ) exit
+      nrv = nrv(1:len_trim(nrv)-1)
+    end do
+
+    !
+    ! 0.3000000 などの末尾の 0 を掃除し, 
+    ! 0.3 などに整形. 
+    !
+    if ( index( trim( nrv ), '.') /= 0 ) then
+      do while ( index('123456789.', nrv(len_trim(nrv):len_trim(nrv)) ) == 0 )
+        if ( len_trim(nrv) < 2 ) exit
+        nrv = nrv(1:len_trim(nrv)-1)
+      end do
+    end if
+
+    !
+    ! 指数部を復帰する
+    ! 
+    if ( len_trim(enrv) > 0 ) then
+      nrv = trim(nrv) // enrv
+    end if
+
+    result = nrv
+  end function RoundNum
+
+end module
+
+__EndOfFortran90Code__
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

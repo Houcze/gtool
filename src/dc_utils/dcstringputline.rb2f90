@@ -1,0 +1,222 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+require("optparse")
+#
+# "dcstringputline.f90" Generator with Ruby.
+#
+opt = OptionParser.new
+opt.on('--max_dim=VAL') {|v| $max_dim = v.to_i}
+opt.parse!(ARGV)
+$max_dim = 7 unless $max_dim
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+__EndOfFortran90Code__
+
+                   types = ["Int", "Real", "Double"]
+types.each{ |type|
+for num in 1..$max_dim
+print <<"__EndOfFortran90Code__"
+
+subroutine PutLine#{type}#{num}( array, lbounds, ubounds, unit, indent, sd )
+                    #{ifelse(num, 1, %Q{
+                    #{ifelse(type, "Int", %Q{
+  !
+  ! 数値型配列の要約を以下のように印字します. 
+  ! avg は平均値, sd は標準偏差です. 
+  ! 標準偏差は, 論理型オプショナル引数 sd に真を与えたときのみ
+  ! 表示します. 
+  !
+  ! Summary of numerical array is printed as follows.
+  ! "avg" is average value, "sd" is standard deviation.
+  ! Standard deviation is displayed only when .true. is set to 
+  ! logical optional argument "sd". 
+  !
+  !   #<INT-ARRAY:: @size=(1:3), @max=3, @min=1, @avg=2. @sd=0.816496611>
+  !   #<SP-ARRAY:: @size=(1:1), @max=0., @min=0., @avg=0. @sd=0.>
+  !   #<DP-ARRAY:: @size=(1:3,1:3,1:3), @max=20., @min=7., @avg=13.5 @sd=3.29140282>
+  !
+  ! *array* には整数, 単精度実数, 倍精度実数の配列 (1 〜 #{$max_dim}) を
+  ! 与えます. 配列添字の下限と上限を表示したい場合には, 
+  ! 以下のように *lbounds* と *ubounds* を指定します. 
+  ! これらを指定しない場合には, 
+  ! 表示される配列添字は 1:<配列サイズ> となります.
+  ! 
+  ! Integer, single precision, and double precision array 
+  ! (1 -- #{$max_dim}) is given to *array*. 
+  ! In order to print the upper bound and the lower bound 
+  ! for subscript of array, 
+  ! specify *lbounds* and *ubounds* as follows. 
+  ! Otherwise, 1:<size of array> is printed as subscript of array.
+  ! 
+  !   program putline_test
+  !     use dc_string, only: PutLine
+  !     real:: rarray(-2:2, -3:3)
+  !   
+  !     rarray(-2:0, -3:0) = -1.0
+  !     rarray(-2:0, 1:3) = -2.0
+  !     rarray(1:2, -3:0) = 1.0
+  !     rarray(1:2, 1:3) = 2.0
+  !     call PutLine ( rarray, & 
+  !       & lbounds = lbound(rarray), ubounds = ubound(rarray) )
+  !   end program putline_test
+  !
+  ! *unit* には印字する装置番号を指定します. デフォルトは標準出力です.
+  ! *indent* には字下げのための空白を与えます.
+  !
+  ! Unit number for print is specified to *unit*. Default is standard output.
+  ! Blank for indent is specified to *indent*.
+  !
+                    })}
+                    })}
+
+  use dc_types, only: DP, STRING, STDOUT
+  use dc_string, only: toChar
+  use dc_string, only: Printf, CPrintf
+  use dc_present, only: present_and_true
+  implicit none
+  #{$type_intent_in[type]}, intent(in):: array#{array_colon("#{num}")}
+  integer, intent(in), optional:: lbounds(#{num})
+  integer, intent(in), optional:: ubounds(#{num})
+  integer, intent(in), optional:: unit
+  character(*), intent(in), optional:: indent
+  logical, intent(in), optional:: sd
+  integer:: out_unit
+  integer:: indent_len
+  character(STRING):: indent_str
+  integer:: i
+  integer:: alldim_size, lbound_nums(#{num}), ubound_nums(#{num})
+  character(STRING):: size_str, sd_str
+  #{$type_internal[type]}:: max_value, min_value
+  #{$type_internal[type]}, allocatable:: array_packed(:)
+  real:: avg_value, variance_value, sd_value
+continue
+
+  !-----------------------------------------------------------------
+  !  オプショナル引数のチェック
+  !  Check optional arguments
+  !-----------------------------------------------------------------
+  if ( present(unit) ) then
+    out_unit = unit
+  else
+    out_unit = STDOUT
+  end if
+
+  indent_len = 0
+  indent_str = ''
+  if ( present(indent) ) then
+    if (len(indent) /= 0) then
+      indent_len = len(indent)
+      indent_str(1:indent_len) = indent
+    end if
+  end if
+
+  !-------------------------------------------------------------------
+  !  配列サイズ
+  !  Array size
+  !-------------------------------------------------------------------
+
+  if ( present(lbounds) .and. present(ubounds) ) then
+    lbound_nums = lbounds
+    ubound_nums = ubounds
+  else
+                    #{forloop("\\$dimnum\\$", 1, num, %Q{
+    lbound_nums($dimnum$) = lbound( array, $dimnum$ )
+    ubound_nums($dimnum$) = ubound( array, $dimnum$ )
+                    })}
+  end if
+
+  size_str = '('
+  size_str = trim(size_str) // trim(toChar(lbound_nums(1))) // ':'
+  size_str = trim(size_str) // trim(toChar(ubound_nums(1)))
+                    #{forloop("\\$dimnum\\$", 2, num, %Q{
+  size_str = trim(size_str) // ',' // trim(toChar(lbound_nums($dimnum$)))
+  size_str = trim(size_str) // ':' // trim(toChar(ubound_nums($dimnum$)))
+                    })}
+  size_str = trim(size_str) // ')'
+
+  !-------------------------------------------------------------------
+  !  最大値
+  !  Maximum value
+  !-------------------------------------------------------------------
+  max_value = maxval(array)
+
+  !-------------------------------------------------------------------
+  !  最小値
+  !  Minimum value
+  !-------------------------------------------------------------------
+  min_value = minval(array)
+
+  !-------------------------------------------------------------------
+  !  平均値
+  !  Average value
+  !-------------------------------------------------------------------
+  alldim_size = size(array)
+  avg_value = sum(array) / real(alldim_size)
+
+  !-------------------------------------------------------------------
+  !  標準偏差
+  !  Standard deviation
+  !-------------------------------------------------------------------
+  sd_value = 0.0
+  variance_value = 0.0
+  sd_str = ''
+  if ( present_and_true( sd ) ) then
+    if ( alldim_size > 1 ) then
+      if (allocated(array_packed)) then
+        deallocate(array_packed)
+      end if
+      allocate( array_packed(alldim_size) )
+
+                      #{ifelse(num, 1, %Q{
+      array_packed = array
+                      }, %Q{
+      array_packed = pack(array, .true.)
+                      })}
+
+      do i = 1, alldim_size
+        variance_value = variance_value + &
+          & (array_packed(i) - avg_value) * (array_packed(i) - avg_value)
+      end do
+      variance_value = variance_value / real(alldim_size)
+      sd_value = sqrt( variance_value )
+      sd_str = CPrintf ( ' @sd=%r', r = (/ sd_value /) )
+    end if
+  end if
+
+  !-------------------------------------------------------------------
+  !  印字
+  !  Print
+  !-------------------------------------------------------------------
+  call Printf(out_unit, &
+    & indent_str(1:indent_len) // &
+                    #{ifelse(type, "Int", %Q{
+    & '#<INT-ARRAY:: @size=%c, @max=%d, @min=%d, @avg=%r%c>', &
+    & i = (/max_value, min_value/), r = (/avg_value/), &
+                    }, type, "Real", %Q{
+    & '#<SP-ARRAY:: @size=%c, @max=%r, @min=%r, @avg=%r%c>', &
+    & r = (/max_value, min_value, avg_value/), &
+                    }, type, "Double", %Q{
+    & '#<DP-ARRAY:: @size=%c, @max=%f, @min=%f, @avg=%r%c>', &
+    & d = (/max_value, min_value/), r = (/avg_value/), &
+                    })}
+
+    & c1 = trim(size_str), c2 = trim(sd_str) )
+
+end subroutine PutLine#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

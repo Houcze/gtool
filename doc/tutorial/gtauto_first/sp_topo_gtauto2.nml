@@ -1,0 +1,18 @@
+!
+! データ出力の全体設定
+!
+&gtool_historyauto_nml
+  IntValue = 1.,              ! 出力間隔の数値
+  IntUnit = 'day',            ! 出力間隔の単位
+/
+!
+! データ出力の個別設定
+!
+&gtool_historyauto_nml
+  Name = 'u, v'               ! 出力変数
+  IntValue = 12.,             ! 出力間隔の数値
+  IntUnit = 'hour',           ! 出力間隔の単位
+/
+&gtool_historyauto_nml
+  Name = 'zeta'               ! 出力変数
+/

@@ -1,0 +1,37 @@
+#= gtool_historyauto のテスト用 NAMELIST ファイル
+#= NAMELIST file for test of "gtool_historyauto"
+#
+# Authors::   Yasuhiro MORIKAWA
+# Version::   $Id: histauto2_nml04.nml,v 1.1 2009-10-11 03:55:56 morikawa Exp $
+# Tag Name::  $Name:  $
+# Copyright:: Copyright (C) GFD Dennou Club, 2008. All rights reserved. 
+# License::   See COPYRIGHT[link:../../COPYRIGHT]
+#
+&gtool_historyauto_nml
+  IntValue   = 10.0, 
+  IntUnit    = 'min', 
+  FilePrefix = 'xhistauto2/test04-'
+/
+&gtool_historyauto_nml
+  Name = 'u1, u2', 
+  File = 'xhistauto2/test04-u.nc',
+  Precision = 'double'
+/
+&gtool_historyauto_nml
+  Name = 'v', 
+  IntValue = 300.0, 
+  IntUnit  = 'sec', 
+  TimeAverage = .false.
+/
+&gtool_historyauto_nml
+  Name = 'w', 
+  File = 'xhistauto2/test04-ww.nc',
+  Precision = 'int', 
+  TimeAverage = .true.
+/
+!
+! エラーチェック用 (無効な変数名でエラーを返す)
+!
+!&gtool_historyauto_nml
+!  Name = 'uX', 
+!/

@@ -1,0 +1,17 @@
+= gtool_history F77 インターフェース HSPACK
+
+== 概要
+
+このパッケージは、gtool5 ライブラリで提供されている gtool_history
+モジュール を、FORTRAN77 で書かれたプログラムから
+用いるための橋渡しをするサブルーチンを提供します。
+
+== 対応表
+
+gtool_history_generic#HistoryCreate 	:: history/hscrea.f90#HSCREA
+gtool_history_generic#HistoryAddVariable:: history/hsavar.f90#HSAVAR
+gtool_history_generic#HistoryPut	:: history/hsp1d.f90#HSP1D, history/hsp2d.f90#HSP2D, history/hsp3d.f90#HSP3D,
+                                           history/hsp1r.f90#HSP1R, history/hsp2r.f90#HSP2R, history/hsp3r.f90#HSP3R
+gtool_history_generic#HistoryAddAttr	:: history/hsaatc.f90#HSAATC, history/hsaatr.f90#HSAATR,
+                                           history/hsaatd.f90#HSAATD, history/hsaati.f90#HSAATI	
+gtool_history_generic#HistoryClose	:: history/hsclse.f90#HSCLSE

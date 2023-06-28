@@ -1,0 +1,212 @@
+#= Template File for "Config.mk", build configuration of gtool5 (autoconf)
+#
+# Authors::   Eizi TOYODA, Masatsugu ODAKA, Shin-ichi TAKEHIRO,
+#             Yasuhiro MORIKAWA
+# Version::   $Id: Config.mk.in,v 1.10 2009-03-31 04:08:54 morikawa Exp $
+# Tag Name::  $Name:  $
+# Copyright:: Copyright (C) GFD Dennou Club, 2000-2006. All rights reserved.
+# License::   See COPYRIGHT[link:COPYRIGHT]
+#
+#== Overview
+#
+# This file is template file to create "configure" script by
+# autoconf 2.59. Some functions are defined in "aclocal.m4"
+# (for example, DC_ARG_WITH).
+#
+# [JAPANESE]
+# このファイルは Makefile 群から呼び出される設定ファイル "Config.mk"
+# の雛形ファイルです. configure スクリプトによってこのファイル内の
+# 一部 (@ で囲まれた変数) が置き換えられ, "Config.mk" が生成されます.
+# configure は configure.in と aclocal.m4 に autoconf コマンドを
+# 用いることで生成されます.
+#
+############################################################
+
+############################################################
+#== for Debian install
+#
+# [JAPANESE] Debian インストール用
+#
+DESTDIR =
+
+############################################################
+#== Fortran Compiler
+#
+# [JAPANESE] Fortran コンパイラ
+#
+FC=@FC@
+
+# Flags needed when compiled and linked
+# [JAPANESE] コンパイル時・リンク時に必要なフラグ
+SYSFFLAGS=@SYSFFLAGS@
+
+# Flags needed when linked
+# [JAPANESE] リンク時に必要なフラグ
+SYSLDFLAGS=@SYSLDFLAGS@
+
+# Libraries needed when linked
+# [JAPANESE] リンク時に必要なライブラリ
+SYSLDLIBS=@SYSLDLIBS@
+
+# Flags for C preprocessor
+# [JAPANESE] Cプリプロセッサのフラグ
+CPPFLAGS=@CPPFLAGS@
+
+# MPI executable command
+#   + an option for number of nodes + an option for number of processes
+# [JAPANESE] MPI 実行コマンド
+#              + ノード数指定オプション + プロセス数指定オプション
+MPIEXEC=@MPIEXEC@
+MPIEXECPROCOPT=@MPIEXECPROCOPT@
+MPIEXECNODEOPT=@MPIEXECNODEOPT@
+
+# Linker which includes flags
+# [JAPANESE] リンカコマンド
+LINKF=@LINKF@
+
+# Host type
+# [JAPANESE] ホストシステムのタイプ
+HOST_CPU=@HOST_CPU@
+
+# Cross-compile
+# [JAPANESE] クロスコンパイル
+CROSS_COMPILING=@CROSS_COMPILING@
+
+# Information of Modules (std.mod, HP.mod, fqs.mod, intel.d, hitachi.f90)
+# [JAPANESE] モジュール情報の渡し方
+F90MODTYPE=@F90MODTYPE@
+
+# Flag for module files search path
+# [JAPANESE] モジュール情報ファイルへのパスを指定するためのフラグ
+MODPATHFLAG=@MODPATHFLAG@
+###MODPATHFLAG=-M     # for SunStudio
+
+# Extensions of Module Files (".mod" or ".d" or ".f90")
+# [JAPANESE] モジュール情報ファイルの拡張子
+MODEXT=@MOD@
+#
+# Extensions of Module Files used when "make clean"
+# * if "F90MODTYPE = hitachi.f90", clean nothing.
+#
+# [JAPANESE]
+# make clean 時に使用するモジュール情報ファイル指定
+# (F90MODTYPE = hitachi.f90 のときは何も消してはならない)
+#
+MODS=@CLEAN_MODS@
+MODSUFFIX=@MODSUFFIX@
+MODFILE=`basename $@ .o`$(MODSUFFIX)
+
+
+############################################################
+#== Directory to which the all files are installed
+#
+# [JAPANESE] インストール先のディレクトリ
+#
+prefix=@prefix@@gt5dstsuffix@
+exec_prefix=@exec_prefix@
+gt5binsuffix=@gt5binsuffix@
+
+DEST_LIB=$(DESTDIR)@libdir@
+DEST_INC=$(DESTDIR)@includedir@
+DEST_BIN=$(DESTDIR)@bindir@
+DEST_DOC=$(DESTDIR)@docdir@
+DEST_SHARE=$(DESTDIR)@datarootdir@
+
+#== Editor for module information (Used when "F90MODTYPE=intel.d")
+IFCCEM=@IFCCEM@
+
+
+############################################################
+#== gtool5 library name and library path
+#
+# [JAPANESE] ライブラリ名とライブラリパス
+#
+LIBBODY=@gt5libname@@gt5libsuffix@
+LIBNAME=lib$(LIBBODY).a
+LIBPATH=$(DIRDEPTH)/src/$(LIBNAME)
+
+
+############################################################
+#== SYSDEPABORT, SYSDEPARG, SYSDEPENV: system dependent routine
+#
+# [JAPANESE] システム依存系のルーチン
+#
+SYSDEPABORT=@SYSDEPABORT@
+SYSDEPARG=@SYSDEPARG@
+SYSDEPENV=@SYSDEPENV@
+
+
+############################################################
+#== Maximum number of dimensions of input and output data
+#
+# If you want to reflect this value to source code,
+# move to "src" and do "make clean.rb2f90" before "make".
+# You need Ruby.
+#
+# [JAPANESE] 入出力するデータの最大次元数
+#
+# ただし, ソースコードに反映させるためには src 以下に移動し,
+# make clean.rb2f90 を実行後に make する必要があります.
+# その際, Ruby が必要になります.
+#
+MAXDIM=@MAXDIM@
+
+
+############################################################
+#== Set Commands for compile and install source code
+#
+# Please edit according to your system.
+#
+# [JAPANESE] コンパイルやインストールに必要なコマンド群
+#
+# システムに合わせて変更してください.
+#
+MV         = mv
+CP         = cp -pv
+INSTALL    = @INSTALL@
+INSTALLBIN = @INSTALLBIN@
+INSTALLDIR = @INSTALLDIR@
+MKDIR      = @MKDIR@
+RM         = rm -fv
+RMDIR      = rmdir -v
+TAGS       = etags
+MAKE       = @MAKE@        # GNU Make
+AR         = @AR@          # AR : Library builder specification
+ARFLAGS    = @ARFLAGS@     # flags of AR
+RANLIB     = @RANLIB@      # generate index to archivea
+NCDUMP     = @NCDUMP@      # netCDF file dump command
+RD2        = rd2           # for Generation of RD documentations
+RDOC       = rdoc          # for Generation of RDoc documentations
+
+
+############################################################
+#== Directory to which the all module files
+#
+# [JAPANESE] モジュール情報ファイルが格納されるディレクトリ
+#
+MODDIR=$(DIRDEPTH)/include
+
+
+############################################################
+#== Tools for build
+#
+# [JAPANESE] ビルド用のツール
+#
+RUBY		= RUBYLIB=$(SCRIPTRB2F90):$(SCRIPTWIN) @RUBY@  -Ku # Ruby 1.8 or more
+PERL		= @PERL@
+SH		= @BASH@
+SCRIPTDIR	= $(DIRDEPTH)/script
+SCRIPTF90	= $(SCRIPTDIR)/f90
+SCRIPTRB2F90	= $(SCRIPTDIR)/rb2f90
+SCRIPTWIN	= $(SCRIPTDIR)/windows
+F90DEPEND	= @F90DEPEND@
+RUBYVERCHECK	= $(SCRIPTRB2F90)/ruby_version_check.rb
+F90DEPENDOPTS	= -q #-S -v
+
+############################################################
+#== Path to CSS etc
+#
+# [JAPANESE] スタイルシートファイルなどへのパス
+#
+CSSPATH		= $(DIRDEPTH)/htmltools/gtool5.css
+EMAIL_PNG	= $(DIRDEPTH)/htmltools/dcstaff_email.png

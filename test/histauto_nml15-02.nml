@@ -1,0 +1,17 @@
+#= gtool_historyauto のテスト用 NAMELIST ファイル
+#= NAMELIST file for test of "gtool_historyauto"
+#
+# Authors::   Yasuhiro MORIKAWA
+# Version::   $Id: histauto_nml15-02.nml,v 1.1 2008-10-07 14:25:23 morikawa Exp $
+# Tag Name::  $Name:  $
+# Copyright:: Copyright (C) GFD Dennou Club, 2008. All rights reserved. 
+# License::   See COPYRIGHT[link:../../COPYRIGHT]
+#
+&gtool_historyauto_nml
+  IntValue = 1.0,
+  IntUnit = 'day',
+  OriginValue = -1.0, 
+  OriginUnit  = 'min', 
+  TerminusValue = -1.0, 
+  TerminusUnit  = 'min', 
+/

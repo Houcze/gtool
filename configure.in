@@ -1,0 +1,845 @@
+dnl= Template file to create configure script for gtool5
+dnl
+dnl  Authors::   Eizi TOYODA, Yasuhiro MORIKAWA
+dnl  Version::   $Id: configure.in,v 1.17 2010-08-29 16:42:39 morikawa Exp $
+dnl  Tag Name::  $Name:  $
+dnl  Copyright:: Copyright (C) GFD Dennou Club, 2000-2009. All rights reserved.
+dnl  License::   See COPYRIGHT[link:COPYRIGHT]
+dnl
+dnl== Overview
+dnl
+dnl This file is template file to create "configure" script by
+dnl autoconf 2.59. Some functions are defined in "aclocal.m4"
+dnl (for example, DC_ARG_WITH).
+dnl
+
+############################################################
+#== This puts the cvs ID tag in the output configure script.
+AC_REVISION($Id: configure.in,v 1.17 2010-08-29 16:42:39 morikawa Exp $)dnl
+
+############################################################
+#== StartUp
+#
+## Running autoconf on this file will trigger a warning if 
+## autoconf is not at least version 2.61.
+AC_PREREQ(2.61)
+
+## Initialize autoconf with name of project, version, and support
+## email address. 
+AC_INIT(gtool5, 0.1, dcstaff@gfd-dennou.org)
+
+## Autoconf will check for the existance of this file before proceeding.
+AC_CONFIG_SRCDIR([src/gtool/gtool5.f90])
+AC_PREFIX_DEFAULT(/usr/local/gtool5)
+
+# Find out about the host we're building on.
+AC_CANONICAL_HOST
+
+######################################################################
+#== Check echo options
+case `echo "testing\c"; echo 1,2,3`,`echo -n testing; echo 1,2,3` in
+  *c*,-n*) ECHO_N= ECHO_C='
+' ECHO_T='      ' ;;
+  *c*,*  ) ECHO_N=-n ECHO_C= ECHO_T= ;;
+  *)       ECHO_N= ECHO_C='\c' ECHO_T= ;;
+esac
+
+############################################################
+#== Script dir settings
+#
+CHKSHDIR=./script/configure ; export CHKSHDIR
+
+############################################################
+#== Set prefix
+#
+if test X"$prefix" != X"NONE" ; then
+	ac_cv_prefix=`echo $prefix | sed 's/\/\+$//'`
+fi
+
+AC_CACHE_CHECK([prefix], ac_cv_prefix, [
+		ac_cv_prefix=$ac_default_prefix
+])
+prefix=`echo $ac_cv_prefix | sed 's/\/\+$//'`
+
+############################################################
+#== Check cross-compiling
+#
+CROSS_COMPILING=$cross_compiling
+AC_SUBST(CROSS_COMPILING)
+
+############################################################
+#== Check fortran Compiler and Module type
+#
+CHK=chkfort    ; export CHK
+OUT=${CHK}.cfg ; export OUT
+sh ${CHKSHDIR}/${CHK}.sh || exit
+eval `cat ${OUT}`
+
+AC_SUBST(FC)
+ac_cv_FC=$FC
+MODSUFFIX=$MOD
+AC_SUBST(MODSUFFIX)
+AC_SUBST(MODPATHFLAG)
+AC_SUBST(F90MODTYPE)
+: ${IFCCEM:=:}
+AC_SUBST(IFCCEM)
+
+if test X"$MOD" = X".f90" ; then
+	CLEAN_MODS=
+elif test X"$MOD" != X"" ; then
+	CLEAN_MODS="*$MOD"
+else
+	CLEAN_MODS=
+fi
+AC_SUBST(CLEAN_MODS)
+
+#
+#== Set host type HOST_CPU
+HOST_CPU=$host_cpu
+AC_SUBST(HOST_CPU)
+
+############################################################
+#== Set Install Command
+#
+
+case "$build" in
+powerpc-ibm-aix*)
+	INSTALL="\$(CP)"
+	INSTALLBIN="\$(CP)"
+	INSTALLDIR="\$(MKDIR)"
+	echo "\"install\" command is not used"
+	;;
+*)
+	INSTALL="install -m 644"
+	INSTALLBIN="install -m 755"
+	INSTALLDIR="install -d -m 755"
+	;;
+esac
+
+if mkdir -p "conftestdir1/conftestdir2" ; then
+	MKDIR="mkdir -p"
+	rmdir "conftestdir1/conftestdir2"
+	rmdir "conftestdir1"
+else
+	MKDIR="mkdir"
+	rmdir "conftestdir1/conftestdir2" || true
+	rmdir "conftestdir1" || true
+fi
+
+AC_SUBST(MKDIR)
+AC_SUBST(INSTALL)
+AC_SUBST(INSTALLBIN)
+AC_SUBST(INSTALLDIR)
+
+dnl AC_PROG_INSTALL
+dnl DC_MOD_INSTALL
+
+############################################################
+#
+#== Set variables LINKF, which means link processes.
+#
+# This code is imported from the patch of netcdf 3.6.0-p1 for
+# SX and ES by T.Kagimoto, and modified.
+#
+#=== Specified by user --with-linker option
+#
+DC_ARG_WITH(linker, [linker (If you use non-fortran compiler)], ac_cv_LINKER, [
+		AC_MSG_RESULT((no))
+])
+
+if test X"$ac_cv_LINKER" != X"" ; then
+    LINKF="$ac_cv_LINKER \$(INCLUDES)"
+else
+    LINKF='$(FC) $(FFLAGS) $(SYSFFLAGS) $(INCLUDES)'
+    case "$host_cpu" in
+	sx5*|sx6*|sx7*|sx8*|es*)
+	    if test ! "$CROSS_COMPILING" = "yes" && \
+		test ! "$CROSS_COMPILING" = "maybe" ; then
+		LINKF='c++ $(INCLUDES) -f90lib'
+	    else
+		LINKF='sxc++ $(INCLUDES) -f90lib'
+	    fi
+	    ;;
+	*)
+	    ;;
+    esac
+    case "$FC" in
+	sxf90*)
+	    LINKF='sxc++ $(INCLUDES) -f90lib'
+	    ;;
+	*)
+	    ;;
+    esac
+fi
+
+AC_SUBST(LINKF)
+
+dnl ############################################################
+dnl #== CharSet
+dnl #
+dnl 
+dnl AC_CHECK_PROG(SJISTOEUC, nkf, nkf -xe)
+dnl AC_CHECK_PROG(SJISTOEUC, iconv, iconv -f SHIFT_JIS -t EUC-JP)
+dnl AC_CHECK_PROG(EUCTOSJIS, nkf, nkf -xs)
+dnl AC_CHECK_PROG(EUCTOSJIS, iconv, iconv -f EUC-JP -t SHIFT_JIS)
+dnl 
+dnl AC_ARG_WITH(charset, [charset: of source and resource (shift_jis or euc-jp)], [
+dnl 	ac_cv_sys_charset=$withval
+dnl ], [
+dnl AC_CACHE_CHECK([charset for source/resource], ac_cv_sys_charset, [
+dnl 	case $SYSTYPE in
+dnl 	*BSD*|Linux*|SunOS-4.*)
+dnl 		ac_cv_sys_charset=euc-jp
+dnl 		;;
+dnl 	*)
+dnl 		ac_cv_sys_charset=shift_jis
+dnl 		;;
+dnl 	esac
+dnl ])
+dnl ])
+dnl CHARSET=$ac_cv_sys_charset
+dnl AC_SUBST(CHARSET)
+
+############################################################
+#== --enable-mpi
+#
+DC_ARG_ENABLE(mpi,
+	[compile with MPI library [disable]], ac_cv_mpi, 
+	[ac_cv_mpi=default]
+)
+
+mpi_autosetting=no
+case $ac_cv_mpi in
+yes)
+	CPPFLAGS="${CPPFLAGS} -DLIB_MPI"
+	;;
+no)
+	CPPFLAGS=
+	;;
+*)
+	if test -n "${MPIFC}" ; then
+	    case "$FC" in
+	    *mpi*)
+		CPPFLAGS="${CPPFLAGS} -DLIB_MPI"
+		mpi_autosetting=yes
+		;;
+	    *)
+		CPPFLAGS=
+	    esac
+	fi
+	;;
+esac
+
+############################################################
+#== Library Check
+
+	#=== Netcdf
+	#
+	DC_ARG_WITH(netcdf, [netcdf library filename], ac_cv_lib_netcdf, [
+		AC_MSG_ERROR(specify netcdf library filename (like libnetcdf.a or libnetcdf.so) with --with-netcdf=)
+	])
+
+	DC_ARG_WITH(netcdff, [netcdf fortran library filename], ac_cv_lib_netcdff, [
+		ac_cv_lib_netcdff=""
+	])
+
+	DC_ARG_WITH(netcdf-include, [netcdf include filename], ac_cv_netcdf_include,, [
+		ac_cv_netcdf_include=""
+	])
+
+	DC_SET_LIBDIR_LIBNAME($ac_cv_lib_netcdf, netcdf_libdir, netcdf_libname)
+	if test -n "$ac_cv_lib_netcdff"; then
+		DC_SET_LIBDIR_LIBNAME($ac_cv_lib_netcdff, netcdff_libdir, netcdff_libname)
+	fi
+
+	if test -n "$ac_cv_netcdf_include" && test -f "$ac_cv_netcdf_include"; then
+	    netcdf_incdir=`dirname $ac_cv_netcdf_include`
+	elif test -n "$ac_cv_netcdf_include" && test -d "$ac_cv_netcdf_include"; then
+	    netcdf_incdir=$ac_cv_netcdf_include
+	else
+	    try2=`dirname $netcdf_libdir`/include
+	    try2="$try2 `echo $netcdf_libdir | sed -e 's|/lib/|/include/|' -e 's|/lib$|/include|'`"
+	    for try3 in $try2; do
+	        if test -f "$try3/netcdf.h"; then
+		    netcdf_incdir=$try3
+		    break
+	        fi
+	    done
+	fi
+
+	test -d "$netcdf_incdir" || AC_MSG_ERROR(netcdf include file not found. specify netcdf include filename (like /usr/lib/netcdf.h) with --with-netcdf-include=)
+
+	#=== mpiexec, mpirun
+	#
+	default_bin_mpiexec=no
+	ac_cv_bin_mpiexec=${default_bin_mpiexec}
+	DC_ARG_WITH(mpiexec, [mpi executable command (like mpiexec, mpirun)], ac_cv_bin_mpiexec,
+		AC_MSG_ERROR(specify mpi executable command (like mpiexec, mpirun) with --with-mpiexec=)
+	)
+
+	case $ac_cv_bin_mpiexec in
+	yes)
+	    AC_MSG_ERROR(specify mpi executable command (like mpiexec, mpirun) with --with-mpiexec=)
+	    ;;
+	no)
+	    MPIEXEC=
+	    MPIEXECPROCOPT=
+	    MPIEXECNODEOPT=
+	    ;;
+	*)
+	    if test ! -f "${ac_cv_bin_mpiexec}" ; then
+		ac_cv_bin_mpiexec_full=`which ${ac_cv_bin_mpiexec}`
+		if test -z "${ac_cv_bin_mpiexec_full}" ; then
+		    AC_MSG_ERROR("${ac_cv_bin_mpiexec}" command is not found)
+		fi
+	    fi
+	    
+	    case "${CPPFLAGS}" in
+		*"-DLIB_MPI"*) ;;
+		*)
+		    CPPFLAGS="${CPPFLAGS} -DLIB_MPI";;
+	    esac
+	    
+	    case $ac_cv_bin_mpiexec in
+	    *mpiexec*)
+		MPIEXEC=$ac_cv_bin_mpiexec
+		MPIEXECPROCOPT=-n
+		MPIEXECNODEOPT=-N
+		;;
+	    *mpirun*)
+		MPIEXEC=$ac_cv_bin_mpiexec
+		MPIEXECPROCOPT=-np
+		MPIEXECNODEOPT=-n
+		;;
+	    *)
+		MPIEXEC=$ac_cv_bin_mpiexec
+		MPIEXECPROCOPT=
+		MPIEXECNODEOPT=
+		echo 'WARNING: "$ac_cv_bin_mpiexec" is unknown command. So edit "MPIEXECNODEOPT" and "MPIEXECPROCOPT" in Config.mk afterward.'
+	        ;;
+	    esac
+	
+	    mpi_autosetting=no
+	
+	    ;;
+	esac
+	
+	AC_SUBST(MPIEXEC)
+	AC_SUBST(MPIEXECPROCOPT)
+	AC_SUBST(MPIEXECNODEOPT)
+	AC_SUBST(CPPFLAGS)
+	
+	if test -n "${MPIEXEC}" ; then
+	    if test -z "${MPIFC}" ; then
+	        AC_MSG_ERROR("${FC}" compiler does not support MPI. Specify MPI fortran compiler to "\$FC")
+	    fi
+	    ac_cv_gt5suffix=mpi
+	fi
+
+############################################################
+#== Get FLAGS for MPI fortran compiler
+#
+
+	mpifc_ldlibs=
+	mpifc_ldflags=
+	mpifc_fflags=
+	
+	if test -n "${MPIEXEC}" ; then
+	    #
+	    #== for mpich
+	    #
+	    #for compopt in `${MPIFC} -compile-info`; do
+	    for compopt in `${MPIFC} -show`; do
+		case $compopt in
+		-I)	;;
+		"-I"*)
+		mpifc_fflags="$mpifc_fflags $compopt" ;;
+		"-L"*)
+		mpifc_ldflags="$mpifc_ldflags $compopt" ;;
+		"-l"*)
+		mpifc_ldlibs="$mpifc_ldlibs $compopt" ;;
+		-s)	;;
+		-c)	;;
+		-f)	;;
+		"-"*)
+		mpifc_fflags="$mpifc_fflags $compopt" ;;
+		*)	;;
+		esac
+	    done
+	fi
+
+
+############################################################
+#== Setting LDFLAGS, LDLIBS, FFLAGS
+#
+if test -n "$ac_cv_lib_netcdff"; then
+	SYSLDFLAGS="-L$netcdff_libdir $SYSLDFLAGS"
+	SYSLDLIBS="-l$netcdff_libname $SYSLDLIBS"
+fi
+SYSLDFLAGS="-L$netcdf_libdir $mpifc_ldflags $SYSLDFLAGS"
+SYSLDLIBS="-l$netcdf_libname $mpifc_ldlibs $SYSLDLIBS"
+SYSFFLAGS="$SYSFFLAGS $ac_cv_fflags $mpifc_fflags"
+
+############################################################
+#== --with-docdir=docidir
+#
+ac_cv_dest_doc='${prefix}/doc'
+DC_ARG_WITH(docdir,
+		[document installation directory (default /usr/local/gtool5/doc)],
+		ac_cv_dest_doc, [
+        AC_MSG_ERROR(specify docdir with --with-docdir=DIR)
+])
+
+case $ac_cv_dest_doc in
+
+"/"*)
+	docdir=${ac_cv_dest_doc} ;;
+
+'${prefix}/doc')
+	docdir=${ac_cv_dest_doc} ;;
+
+no)
+	docdir='${prefix}/doc' ;;
+
+*)
+	echo $ECHO_N "reconfigure with --with-docdir=DIR, $ECHO_C"
+	echo 'but DIR must be ABSOLUTE path name.'
+	AC_MSG_ERROR(unrecognized docdir type) ;;
+esac
+
+AC_SUBST(docdir)
+
+
+
+############################################################
+#== --with-gt5libname=ARG
+#
+
+default_gt5libname=gtool5
+ac_cv_gt5libname=${default_gt5libname}
+DC_ARG_WITH(gt5libname,	[library name (default gtool5)],
+	ac_cv_gt5libname,
+	[AC_MSG_ERROR(specify library name --with-gt5libname=ARG)]
+)
+
+case $ac_cv_gt5libname in
+*'/'*)
+	gt5libname=`basename ${ac_cv_gt5libname}` ;;
+
+*)
+	if test "${ac_cv_gt5libname}" = "" ; then
+	   gt5libname=${default_gt5libname}
+	else
+	   gt5libname=${ac_cv_gt5libname}
+	fi ;;
+esac
+
+echo "set libname \"${gt5libname}\""
+
+AC_SUBST(gt5libname)
+
+
+############################################################
+#== --with-gt5suffix=ARG
+#
+
+default_gt5suffix=no
+DC_ARG_WITH(gt5suffix,	[set suffix to installdir, library name, and executable files (default empty)],
+	ac_cv_gt5suffix, [
+	ac_cv_gt5suffix=""
+])
+
+case $ac_cv_gt5suffix in
+*'/'*)
+	gt5suffix=`basename ${ac_cv_gt5suffix}` ;;
+
+*)
+	if test "${ac_cv_gt5suffix}" = "" ; then
+	   gt5suffix=${default_gt5suffix}
+	else
+	   gt5suffix=${ac_cv_gt5suffix}
+	fi ;;
+esac
+
+if test "${gt5suffix}" = "no" ; then
+   gt5dstsuffix=""
+   gt5libsuffix=""
+   gt5binsuffix=""
+else
+   gt5dstsuffix=-$gt5suffix
+   gt5libsuffix=-$gt5suffix
+   gt5binsuffix=.$gt5suffix
+fi
+
+echo "set gt5dstsuffix \"${gt5dstsuffix}\"", \
+     "set gt5libsuffix \"${gt5libsuffix}\"", \
+     "set gt5binsuffix \"${gt5binsuffix}\""
+
+AC_SUBST(gt5dstsuffix)
+AC_SUBST(gt5libsuffix)
+AC_SUBST(gt5binsuffix)
+
+
+############################################################
+#== --with-lang_conform_check
+#
+
+DC_ARG_WITH(lang_conform_check,
+	[language standard conformance checking (default no)],
+	ac_cv_lang_conform_check,
+	[ac_cv_lang_conform_check=no]
+)
+
+case $ac_cv_lang_conform_check in
+f95)
+	if test X"$F90MODTYPE" = X"fqs.mod"; then
+	   SYSFFLAGS="$SYSFFLAGS -v95d,95o,95s"
+	   echo "set compile and link flags \"-v95d,95o,95s\""
+	   
+	elif test X"$F90MODTYPE" = X"std.mod"; then
+	    case $FC in
+	        *g95*)
+		    SYSFFLAGS="$SYSFFLAGS -std=f95"
+		    echo "set compile and link flags \"-std=f95\""
+		    ;;
+	        *ifort)
+		    SYSFFLAGS="$SYSFFLAGS -stand 95 -e95"
+		    echo "set compile and link flags \"-stand 95 -e95\""
+		    ;;
+		*)
+		    AC_MSG_ERROR(I do not know language standard conformance checking options of your compiler)
+		    ;;
+	    esac
+	else
+	   AC_MSG_ERROR(I do not know language standard conformance checking options of your compiler)
+	fi ;;
+no)	;;
+*)		echo $ECHO_N "reconfigure with --with-lang_conform_check={f95,no} $ECHO_C"
+		echo ' or --without-lang_conform_check'
+		AC_MSG_ERROR(unknown lang_conform_check type) ;;
+esac
+
+
+############################################################
+#== --enable-diagmsg
+#
+
+DC_ARG_ENABLE(diagmsg,
+	[output diagnostic messages about the source program [disable]],
+	ac_cv_diagmsg,
+	[ac_cv_diagmsg=no]
+)
+
+
+case $ac_cv_diagmsg in
+yes)
+	if test X"$F90MODTYPE" = X"fqs.mod"; then
+	    case "$SYSFFLAGS" in
+		*"-E cg"*) ;;
+		*)	SYSFFLAGS="$SYSFFLAGS -E cg";;
+	    esac
+	    echo "set compile and link flags \"-E cg\""
+
+	elif test X"$F90MODTYPE" = X"std.mod"; then
+	    case $FC in
+	        *g95*)
+		    case "$SYSFFLAGS" in
+			*"-Wall"*) ;;
+			*)	SYSFFLAGS="$SYSFFLAGS -Wall";;
+		    esac
+		    echo "set compile and link flags \"-Wall\""
+		    ;;
+	        *ifort)
+		    case "$SYSFFLAGS" in
+			*"-warn all"*) ;;
+			*)	SYSFFLAGS="$SYSFFLAGS -warn all";;
+		    esac
+		    echo "set compile and link flags \"-warn all\""
+		    ;;
+		*)
+		    AC_MSG_ERROR(I do not know outputs diagnostic messages options of your compiler)
+		    ;;
+	    esac
+	else
+	   AC_MSG_ERROR(I do not know outputs diagnostic messages options of your compiler)
+	fi ;;
+no)   ;;
+*)		echo 'reconfigure with --enable-diagmsg or --disable-diagmsg'
+		AC_MSG_ERROR(unknown diagmsg type) ;;
+esac
+
+
+############################################################
+#== --enable-debug
+#
+
+DC_ARG_ENABLE(debug,
+	[check Fortran source programs [disable]], ac_cv_debug, 
+	[ac_cv_debug=no]
+)
+
+case $ac_cv_debug in
+yes)
+	if test X"$F90MODTYPE" = X"fqs.mod"; then
+	    case "$SYSFFLAGS" in
+		*"-E cg"*) ;;
+		*)	SYSFFLAGS="$SYSFFLAGS -E cg";;
+	    esac
+	    SYSFFLAGS="$SYSFFLAGS -g -H aesux"
+	    echo "set compile and link flags \"-E cg -g -H aesux\""
+
+	elif test X"$F90MODTYPE" = X"std.mod"; then
+	    case $FC in
+	        *g95*)
+		    case "$SYSFFLAGS" in
+			*"-Wall -ftrace=frame"*) ;;
+			*)	SYSFFLAGS="$SYSFFLAGS -Wall -ftrace=frame";;
+		    esac
+		    echo "set compile and link flags \"-Wall -ftrace=frame\""
+		    ;;
+	        *ifort)
+		    case "$SYSFFLAGS" in
+			*"-warn all -check all -traceback"*) ;;
+			*)	SYSFFLAGS="$SYSFFLAGS -warn all -check all -traceback";;
+		    esac
+		    echo "set compile and link flags \"-warn all -check all -traceback\""
+		    ;;
+		*)
+		    AC_MSG_ERROR(I do not know debug options of your compiler)
+		    ;;
+	    esac
+	else
+	   AC_MSG_ERROR(I do not know debug options of your compiler)
+	fi ;;
+no)   ;;
+*)		echo 'reconfigure with --enable-debug or --disable-debug'
+		AC_MSG_ERROR(unknown debug type) ;;
+esac
+
+
+############################################################
+#== Care for some special Environments
+# 
+
+if test X"$F90MODTYPE" = X"intel.d"; then
+	case "$SYSLDLIBS$SYSLDFLAGS$SYSFFLAGS" in
+	*-Vaxlib*) ;;
+	*)	SYSLDLIBS="$SYSLDLIBS -Vaxlib";;
+	esac
+fi
+
+if test X"$F90MODTYPE" = X"fqs.mod"; then
+	case "$SYSFFLAGS" in
+	*-Am*) ;;
+	*)	SYSFFLAGS="$SYSFFLAGS -Am";;
+	esac
+fi
+
+case "$host_cpu" in
+    sx5*|sx6*|sx7*|sx8*|es*)
+	SYSFFLAGS="$SYSFFLAGS -Wf'-pvctl loopcnt=65536 nodivloop noloopchg -O'"
+	;;
+    *)
+	;;
+esac
+
+case "$FC" in
+    sxf90*)
+	SYSFFLAGS="$SYSFFLAGS -Wf'-pvctl loopcnt=65536 nodivloop noloopchg -O'"
+	;;
+    *)
+	;;
+esac
+
+AC_SUBST(SYSLDLIBS)
+AC_SUBST(SYSLDFLAGS)
+AC_SUBST(SYSFFLAGS)
+
+############################################################
+#== system dependent runtime selection (not checked)
+#
+
+DC_ARG_WITH(getarg, [getarg runtime procedure], ac_cv_fortran_getarg,
+	ac_cv_fortran_getarg=$SYSDEPARG
+)
+SYSDEPARG=$ac_cv_fortran_getarg
+case $SYSDEPARG in
+f2003std)	echo 'sysdepargget() calls GET_COMMAND_ARGUMENT' ;;
+nostd)		echo 'sysdepargget() calls GETARG' ;;
+hitachi)	echo 'sysdepargget() calls GETARG' ;;
+*)		echo 'reconfigure with --with-getarg={f2003std,nostd,hitachi}'
+		AC_MSG_ERROR(unknown getarg type) ;; 
+esac
+AC_SUBST(SYSDEPARG)
+
+
+DC_ARG_WITH(getenv, [getenv runtime procedure], ac_cv_fortran_getenv,
+	ac_cv_fortran_getenv=$SYSDEPENV
+)
+SYSDEPENV=$ac_cv_fortran_getenv
+case $SYSDEPENV in
+f2003std)	echo 'sysdepenv() calls GET_ENVIRONMENT_VARIABLE' ;;
+nostd)		echo 'sysdepenv() calls GETENV' ;;
+nogetenv)	echo 'sysdepenv() calls dummy procedures' ;;
+*)		echo 'reconfigure with --with-getenv={f2003std,nostd,nogetenv}'
+		AC_MSG_ERROR(unknown getenv type) ;; 
+esac
+AC_SUBST(SYSDEPENV)
+
+
+DC_ARG_WITH(abort, [abort runtime procedure [abort]], ac_cv_fortran_abort,
+        ac_cv_fortran_abort=abort
+)
+SYSDEPABORT=$ac_cv_fortran_abort
+case $SYSDEPABORT in
+abort)		echo 'sysdepabort() calls ABORT';;
+errtra-setrcd)	echo 'sysdepabort() calls ERRTRA/SETRCD/EXIT (intended for Lahey/Fujitsu Fortran)';;
+exit)		echo 'sysdepabort() calls EXIT (intended for Intel Fortran)';;
+setrcd)		echo 'sysdepabort() calls SETRCD/EXIT (intended for FQS Fortran)';;
+stop)		echo 'sysdepabort() executes STOP';;
+*)		echo 'reconfigure with --with-abort={abort,errtra-setrcd,exit,setrcd,stop}'
+		AC_MSG_ERROR(unknown abort type) ;;
+esac
+AC_SUBST(SYSDEPABORT)
+
+############################################################
+#== Maximum number of dimensions of input and output data
+
+DC_ARG_WITH(maxdim, [max number of dimensions of in/out data (default 7)], ac_cv_maxdim, [
+	ac_cv_maxdim=7
+])
+if test X"${ac_cv_maxdim}" != X"" ; then
+	if let "${ac_cv_maxdim} < 1" > /dev/null ; then 
+		AC_MSG_ERROR(Specify positive value with --with-maxdim=)
+	elif let "${ac_cv_maxdim} > 100" > /dev/null ; then
+		AC_MSG_ERROR(Max number of dimensions with --with-maxdim= is too large. )
+	elif let "${ac_cv_maxdim} > 50" > /dev/null ; then
+		echo 'WARNING: Max number of dimensions with --with-maxdim= is very large. So the compilation may be impossible.'
+		MAXDIM=${ac_cv_maxdim}
+	else
+		MAXDIM=${ac_cv_maxdim}
+	fi
+else
+	AC_MSG_ERROR(Specify positive value with --with-maxdim=)
+fi
+
+#case $ac_cv_maxdim in
+#	'*[0-9]*')
+#		;;
+#	[0-9][0-9])
+#		echo 'WARNING: Because max number of dimensions is very large, the compilation may be impossible.'
+#		;;
+#	[0-9][0-9][0-9]*)
+#		AC_MSG_ERROR(The value with --with-maxdim= is too large.)
+#		;;
+#	*)
+#		echo ${ac_cv_maxdim}
+#		AC_MSG_ERROR(Specify positive value with --with-maxdim=)
+#		;;
+#esac
+
+AC_SUBST(MAXDIM)
+
+############################################################
+#== Some system commands
+
+#=== make
+#
+export MAKE
+CHK=chkgmake   ; export CHK
+OUT=${CHK}.cfg ; export OUT
+sh ${CHKSHDIR}/${CHK}.sh || exit
+eval `cat ${OUT}`
+
+AC_SUBST(MAKE)
+
+#=== ar
+#
+AC_CHECKING(for ar utility)
+case "${AR-unset}" in
+    unset) AC_CHECK_PROGS(AR, ar, ar) ;;
+    *) AC_CHECK_PROGS(AR, $AR ar, ar) ;;
+esac
+AC_MSG_CHECKING(ar flags)
+case "${ARFLAGS-unset}" in
+    unset) ARFLAGS=cru ;;
+esac
+AC_MSG_RESULT($ARFLAGS)
+AC_SUBST(ARFLAGS)
+
+case "$build" in
+    powerpc-ibm-aix*)
+	case "${ARFLAGS-unset}" in
+	    unset) ARFLAGS="-X64" ;;
+	    *-X64*) ;;
+	    *) ARFLAGS="-X64 $ARFLAGS" ;;
+	esac
+	;;
+    *)
+	;;
+esac
+
+AC_SUBST(AR)
+
+#=== ranlib
+#
+AC_PROG_RANLIB
+
+#=== ncdump
+#
+case "${NCDUMP-unset}" in
+    unset) AC_CHECK_PROGS(NCDUMP, ncdump) ;;
+    *) AC_CHECK_PROGS(NCDUMP, $NCDUMP ncdump) ;;
+esac
+if test -z "$NCDUMP"; then
+    AC_MSG_WARN("Could not find ncdump command")
+fi
+
+AC_SUBST(NCDUMP)
+
+#=== Ruby, Perl, Bash
+#
+export RUBY
+export PERL
+export BASH
+CHK=chkrps     ; export CHK
+OUT=${CHK}.cfg ; export OUT
+CHKRUBYVER=${CHKSHDIR}/chkrubyver.rb ; export CHKRUBYVER
+sh ${CHKSHDIR}/${CHK}.sh || exit
+eval `cat ${OUT}`
+
+test -n "$RUBY" || RUBY=false
+
+AC_SUBST(RUBY)
+AC_SUBST(PERL)
+AC_SUBST(BASH)
+
+#=== Fortran 90 dependency check script
+#
+if test X"${RUBY}" != X"false" ; then
+   F90DEPEND='$(RUBY) $(SCRIPTF90)/f90depend.rb'
+elif test -n "$PERL" ; then
+   F90DEPEND='$(PERL) $(SCRIPTF90)/f90depend.pl'
+else
+   F90DEPEND='$(SH) $(SCRIPTF90)/f90depend.sh'
+fi
+AC_SUBST(F90DEPEND)
+
+
+############################################################
+#== output
+#
+
+AC_OUTPUT(Config.mk:Config.mk.in)
+
+if test "$mpi_autosetting" = "yes"; then
+	echo ""
+	echo "%%% NOTE %%%  Gtool5 will be built for MPI programs. "
+	echo "              If features for MPI are not needed, rerun ./configure with \"--disable-mpi\" option "
+fi
+
+echo ""
+echo "  Execute GNU make in the current directory, as follows."
+echo ""
+echo "    $MAKE"
+echo ""

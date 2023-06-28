@@ -1,0 +1,1195 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+require("optparse")
+#
+# "gtool_historyauto_internal.f90" Generator with Ruby.
+#
+opt = OptionParser.new
+opt.on('--histput_dim=VAL') {|v| $histput_dim = v.to_i}
+opt.parse!(ARGV)
+$histput_dim = 7 unless $histput_dim
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= gtool_historyauto 内で使用される内部向け定数, 変数, 手続き群
+!= Internal constants, variables, procedures used in "gtool_historyauto"
+!
+! Authors::   Yasuhiro MORIKAWA
+! Version::   $Id: gtool_historyauto_internal.rb2f90,v 1.6 2010-07-04 22:01:51 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2008-2009. All rights reserved.
+! License::   See COPYRIGHT[link:../../../COPYRIGHT]
+!
+
+module gtool_historyauto_internal
+  !
+  != gtool_historyauto 内で呼ばれる内部向け定数, 変数, 手続き群
+  != Constants, variable, procedures used in "gtool_historyauto" internally
+  !
+  ! <b>Note that Japanese and English are described in parallel.</b>
+  !
+
+  ! gtool_history モジュール
+  ! "gtool_history" module
+  !
+  use gtool_history, only: GT_HISTORY_AXIS, GT_HISTORY_VARINFO, GT_HISTORY
+
+  ! NAMELIST の使用を想定したヒストリデータ出力情報管理用ユーティリティ
+  ! Utilities for history data output information management assuming use of NAMELIST
+  !
+  use gtool_history_nmlinfo, only: GTHST_NMLINFO
+
+  ! NetCDF ライブラリで規定される最大の次元の数
+  ! Maximum number of dimensions prescribed by the NetCDF library
+  !
+  use netcdf, only: NF90_MAX_DIMS
+
+  ! 暦と日付の取り扱い
+  ! Calendar and date handler
+  !
+  use dc_calendar, only: DC_CAL, DC_CAL_DATE
+                              ! 暦と日時を表現するデータ型.
+                              ! Derived data type for calendar and date
+
+  ! 日付および時刻の取り扱い (旧版)
+  ! Date and time handler (Old version)
+  !
+  use dc_date_types, only: DC_DATETIME, DC_DIFFTIME
+                              ! 日時の差を表現するデータ型.
+                              ! Data type for difference about date and time
+  ! 種別型パラメタ
+  ! Kind type parameter
+  !
+  use dc_types, only: DP, &      ! 倍精度実数型. Double precision.
+    &                 STRING, &  ! 文字列.       Strings.
+    &                 TOKEN, &   ! キーワード.   Keywords.
+    &                 STDERR     ! 標準エラー出力.  Standard error output
+
+  implicit none
+  private
+  public:: GT_HISTORY_AXIS_DATA, GT_HISTORY_MULTI
+  public:: SLICE_INFO, AXES_WEIGHT, SPACE_AVR_INFO
+
+  public:: HstVarsOutputCheck, HstFileCreate, AverageReduce
+
+  ! 次元数
+  ! Number of dimensions
+  !
+  integer, save, public:: numdims
+
+  ! 座標重み変数の数
+  ! Number of variables of axes weight
+  !
+  integer, save, public:: numwgts = 0
+
+  ! 座標重み変数の接尾詞
+  ! Suffix of variables of axes weight
+  !
+  character(*), parameter, public:: wgtsuf = '_weight'
+
+  ! 変数の数
+  ! Number of variables
+  !
+  integer, save, public:: numvars = 0
+
+  ! 1 つの変数が依存可能な次元の数
+  ! Number of dimensions on which one variable can depend
+  !
+  integer, parameter, public:: MAX_DIMS_DEPENDED_BY_VAR = #{$histput_dim}
+
+  ! 出力間隔をΔtで割った際に, 余りとして許容される範囲
+  ! Allowable range of remainder of output interval divided by delta t
+  !
+  real(DP), parameter, public:: max_remainder_range = 1.0e-3_DP
+
+  ! 出力ファイルの基本メタデータ
+  ! Basic meta data for output file
+  !
+  character(STRING), save, public:: title_save
+  character(STRING), save, public:: source_save
+  character(STRING), save, public:: institution_save
+  character(STRING), save, public:: conventions_save
+  character(TOKEN),  save, public:: gt_version_save
+  character(TOKEN),  save, public:: rank_save
+
+  ! 時刻データ
+  ! Time data
+  !
+!  integer, parameter, public:: save_tstepnum = 3
+  integer, parameter, public:: save_tstepnum = 1
+                              ! 保存する時間ステップの数.
+                              ! Number of saved time step
+  real(DP), save, public:: saved_time(1:save_tstepnum)
+  integer, save, public:: checked_tstepnum = 0
+                              ! チェックされた時間ステップの数.
+                              ! Number of checked time step
+  integer, save, public:: checked_tstep_varnum = 0
+                              ! チェックされた変数の数.
+                              ! Number of checked variables
+  integer, save, public:: saved_tstep = 1
+                              ! 前回チェックされた時間ステップ.
+                              ! (HstVarsOutputCheck で使用する).
+                              !
+                              ! Time step checked at previous time
+                              ! (Used in "HstVarsOutputCheck").
+
+  ! 時刻の単位 (HistoryAutoCreate の dims によって指定されたもの)
+  ! Unit of time (specified by "dims" of "HistoryAutoCreate")
+  !
+  character(TOKEN), save, public:: time_unit_bycreate = ''
+  character(STRING), save, public:: time_unit_suffix = ''
+
+  ! NAMELIST の使用を想定したヒストリデータ出力情報管理用ユーティリティ
+  ! Utilities for history data output information management assuming use of NAMELIST
+  !
+  type(GTHST_NMLINFO), save, public:: gthstnml
+
+  type GT_HISTORY_AXIS_DATA
+    !
+    ! 座標軸データ用の構造型
+    ! Derived type for axes data
+    !
+    real(DP), pointer:: a_axis(:) =>null()
+  end type GT_HISTORY_AXIS_DATA
+
+  ! 座標軸情報
+  ! Information of axes
+  !
+  type(GT_HISTORY_AXIS), save, target, public:: gthst_axes(1:NF90_MAX_DIMS)
+  type(GT_HISTORY_AXIS_DATA), save, target, public:: data_axes(1:NF90_MAX_DIMS)
+  type(GT_HISTORY_AXIS_DATA), save, target, public:: data_axes_whole(1:NF90_MAX_DIMS)
+  type(GT_HISTORY_VARINFO), save, public:: gthst_weights(1:NF90_MAX_DIMS)
+  type(GT_HISTORY_AXIS_DATA), save, target, public:: data_weights(1:NF90_MAX_DIMS)
+
+  ! MPI 関連の情報
+  ! Information about MPI
+  !
+  logical, save, public:: save_mpi_split  = .false.
+  logical, save, public:: save_mpi_gather = .false.
+
+  type GT_HISTORY_MULTI
+    !
+    ! GT_HISTORY 型変数を指す構造体
+    ! Derived type for indication to "GT_HISTORY"
+    !
+    type(GT_HISTORY), pointer:: gthist =>null()
+  end type GT_HISTORY_MULTI
+
+  ! 変数情報
+  ! Information of variables
+  !
+  integer, parameter, public:: MAX_VARS = 256
+                              ! 出力可能な変数の最大値
+                              ! Maximum value of output variables
+  type(GT_HISTORY_VARINFO), save, public:: gthst_vars(1:MAX_VARS)
+  character(TOKEN), save, public:: varname_vars(1:MAX_VARS) = ''
+  type(GT_HISTORY_MULTI), save, public:: gthst_history_vars(1:MAX_VARS)
+  logical, save, public:: output_valid_vars(1:MAX_VARS) = .false.
+                              ! 変数出力が有効か否か.
+                              ! Whether output of variables is valid or not.
+  logical, save, public:: create_timing_vars(1:MAX_VARS, 1:save_tstepnum) = .false.
+                              ! 各時間ステップではファイルを作成するか
+                              ! Whether file is created or not at eath time step.
+  logical, save, public:: close_timing_vars(1:MAX_VARS, 1:save_tstepnum) = .false.
+                              ! 各時間ステップではファイルをクローズするか
+                              ! Whether file is closed or not at eath time step.
+  logical, save, public:: renew_timing_vars(1:MAX_VARS, 1:save_tstepnum) = .false.
+                              ! 各時間ステップではファイルを再オープンするか
+                              ! Whether file is closed and opened or not at eath time step.
+
+  logical, save, public:: output_timing_vars(1:MAX_VARS, 1:save_tstepnum) = .false.
+                              ! 各時間ステップでは出力を行うか否か.
+                              ! Whether output is done or not at eath time step.
+  logical, save, public:: output_timing_avr_vars(1:MAX_VARS, 1:save_tstepnum) = .false.
+                              ! 各時間ステップでは平均値出力を行うか否か.
+                              ! Whether output of averaged values is done or not at eath time step.
+  real(DP), save, public:: interval_time_vars(1:MAX_VARS)
+                              ! 出力時間間隔.
+                              ! Interval time of output.
+  integer, save, public:: interval_unitsym_vars(1:MAX_VARS)
+                              ! 出力時間間隔の単位 (シンボル).
+                              ! Units (symbols) of interval time of output.
+  real(DP), save, public:: prev_outtime_vars(1:MAX_VARS)
+                              ! 前回に出力した時間.
+                              ! Time of previous output
+  logical, save, public:: tavr_vars(1:MAX_VARS) = .false.
+                              ! 時間平均フラグ.
+                              ! Flag for time average
+  real(DP), save, public:: origin_time_vars(1:MAX_VARS)
+                              ! 出力開始時刻.
+                              ! Start time of output
+  real(DP), save, public:: terminus_time_vars(1:MAX_VARS)
+                              ! ファイルをクローズする時刻.
+                              ! time of closure of file
+  logical, save, public:: histaddvar_vars(1:MAX_VARS) = .false.
+                              ! HistoryAddVariable 済みかどうか
+                              ! Whether "HistoryAddVariable" is done or not.
+  real(DP), save, public:: newfile_inttime_vars(1:MAX_VARS)
+                              ! ファイルを新規に作り直す時間間隔.
+                              ! Interval time of remake of file
+  real(DP), save, public:: newfile_createtime_vars(1:MAX_VARS)
+                              ! ファイルを新規に作り直した時間.
+                              ! Time of remake of file
+  logical, save, public:: flag_output_prev_vars(1:MAX_VARS) = .false.
+                              ! ファイル出力を一度でも行ったかどうかのフラグ
+                              ! Flag implying that file is output previously
+  real(DP), save, public:: zero_time
+                              ! ゼロ秒. Zero second
+
+  type SLICE_INFO
+    !
+    ! 空間切り出し情報管理用の構造型
+    ! Derived type for information of slice of space
+    !
+    integer, pointer:: st(:) =>null()
+                              ! 空間方向の開始点.
+                              ! Start points of spaces.
+    integer, pointer:: ed(:) =>null()
+                              ! 空間方向の終了点.
+                              ! End points of spaces.
+    integer, pointer:: sd(:) =>null()
+                              ! 空間方向の刻み幅.
+                              ! Strides of spaces
+  end type SLICE_INFO
+
+  ! データの切り出し情報
+  ! Information of slices of data
+  !
+  type(SLICE_INFO), save, target, public:: slice_vars(1:MAX_VARS)
+
+  type AXES_WEIGHT
+    !
+    ! 座標重み情報管理用の構造型
+    ! Derived type for information of axes weight
+    !
+                    #{forloop("\\$num\\$", 1, $histput_dim, %Q{
+    real(DP), pointer:: wgt$num$(:) =>null()
+                    })}
+  end type AXES_WEIGHT
+
+  ! 座標重み情報
+  ! Information of axes weight
+  !
+  type(AXES_WEIGHT), save, target, public:: weight_vars(1:MAX_VARS)
+
+  type SPACE_AVR_INFO
+    !
+    ! 空間平均情報管理用の構造型
+    ! Derived type for information of average in space direction
+    !
+    logical, pointer:: avr(:) =>null()
+                              ! 平均化のフラグ.
+                              ! Flag of average.
+  end type SPACE_AVR_INFO
+
+  ! データの切り出し情報
+  ! Information of slices of data
+  !
+  type(SPACE_AVR_INFO), save, target, public:: space_avr_vars(1:MAX_VARS)
+
+  ! 登録変数を全て出力するためのフラグ.
+  ! Flag for output all registered variables.
+  !
+  logical, save, public:: all_output_save = .false.
+
+  ! 変数登録は確定されているか.
+  ! * HistoryAutoAllVarFix が呼ばれると .true. になる.
+  ! * 一度 .true. になると, HistoryAutoAddVariable を呼ぶことはできない.
+  !
+  ! Whether register of variables is fixed.
+  ! * When "HistoryAutoAllVarFix" is called, this argument becomes .true.
+  ! * Once this argument becomes .true., "HistoryAutoAddVariable" can not be called.
+  !
+  logical, save, public:: flag_allvarfixed = .false.
+
+  ! 暦情報
+  ! Calendar
+  !
+  type(DC_CAL), save, public:: cal_save
+
+!!$  ! モデルの開始日時
+!!$  ! Start date and time of a model
+!!$  !
+!!$  type(DC_CAL_DATE), save, public:: start_date_save
+
+  ! 初期設定フラグ
+  ! Initialization flag
+  !
+  logical, save, public:: initialized = .false.
+
+  character(*), parameter, public:: sub_sname = "HistAuto"
+
+  character(*), parameter, public:: version = &
+    & '$Name:  $' // &
+    & '$Id: gtool_historyauto_internal.rb2f90,v 1.6 2010-07-04 22:01:51 morikawa Exp $'
+
+  interface HstVarsOutputCheck
+    module procedure HstVarsOutputCheck
+  end interface
+
+  interface HstFileCreate
+    module procedure HstFileCreate
+  end interface
+
+  interface AverageReduce
+
+__EndOfFortran90Code__
+
+types = ["Real", "Double", "Int"]
+types.each{ |type|
+for num in 1..$histput_dim
+print <<"__EndOfFortran90Code__"
+
+    module procedure AverageReduce#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+contains
+
+  !-------------------------------------------------------------------
+  !------------- 内部サブルーチン ; Internal Subroutines -------------
+  !-------------------------------------------------------------------
+
+  subroutine HstVarsOutputCheck ( time, stime_index )
+    !
+    ! 与えられた時刻 *time* が各変数にとって出力のタイミングかどうかを
+    ! 調査して output_timing_vars, output_timing_avr_vars,
+    ! create_timing_vars, close_timing_vars, renew_timing_vars,
+    ! へ反映し, *time* に対応する
+    ! saved_time の配列添字を stime_index へ返します.
+    !
+    ! また, ファイルのオープンクローズのタイミングであれば,
+    ! それらもこのサブルーチン内で行います.
+    !
+    ! It is investigated whether "time" is output timing for
+    ! each variable, and the information is reflected to
+    ! "output_timing_vars", "output_timing_avr_vars",
+    ! "create_timing_vars", "close_timing_vars", "renew_timing_vars".
+    ! And index of array "saved_time" is returned to "stime_index".
+    !
+    ! And if current time is timing of open/close of files,
+    ! they are done in this subroutine.
+    !
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_error, only: StoreError, DC_NOERR
+    use gtool_history, only: HistoryInitialized, HistoryClose
+    use dc_date_types, only: DC_DIFFTIME
+    use dc_date, only: operator(==), operator(>), operator(<), &
+      & operator(>=), operator(<=), operator(-), DCDiffTimePutLine, &
+      & EvalSec
+    implicit none
+    real(DP), intent(in):: time
+                              ! 現在時刻. Current time
+    integer, intent(out):: stime_index
+
+    integer:: tstep
+    integer:: stat, i, startnum, endnum
+    character(STRING):: cause_c
+    character(*), parameter:: subname = "HstVarsOutputCheck"
+  continue
+    call BeginSub(subname)
+    stat = DC_NOERR
+    cause_c = ""
+
+    ! 与えられた時刻がチェック済みかどうかを調べる
+    ! Examine whether given time is already checked or not
+    !
+    TimeStepSearch: do
+      do i = saved_tstep, checked_tstepnum
+        if ( saved_time(i) == time ) then
+          tstep = i
+          exit TimeStepSearch
+        end if
+      end do
+      do i = 1, saved_tstep - 1
+        if ( saved_time(i) == time ) then
+          tstep = i
+          exit TimeStepSearch
+        end if
+      end do
+
+      tstep = 0
+      exit TimeStepSearch
+    end do TimeStepSearch
+
+    saved_tstep = tstep
+
+    if ( saved_tstep /= 0 .and. checked_tstep_varnum == numvars ) then
+      ! * output_timing_vars(:,saved_tstep) を使う.
+      ! * saved_tstep を stime_index として返す.
+
+      stime_index = saved_tstep
+      call DbgMessage( 'saved_tstep=<%d> is already checked.', &
+        & i =(/ saved_tstep /) )
+      goto 999
+    end if
+
+    ! チェックする時間ステップと, 変数 ID の設定
+    ! Configure checked time step, and variable ID
+    !
+    if ( saved_tstep /= 0 ) then
+      startnum = checked_tstep_varnum + 1
+      endnum   = numvars
+
+      stime_index = saved_tstep
+    else
+      startnum = 1
+      endnum   = numvars
+
+      if ( save_tstepnum < 2 ) then
+        checked_tstepnum = 1
+        saved_time(checked_tstepnum) = time
+
+        saved_tstep = checked_tstepnum
+        stime_index = saved_tstep
+
+      elseif ( .not. checked_tstepnum < save_tstepnum ) then
+        create_timing_vars(:,1:checked_tstepnum-1) = create_timing_vars(:,2:checked_tstepnum)
+        close_timing_vars(:,1:checked_tstepnum-1) = close_timing_vars(:,2:checked_tstepnum)
+        renew_timing_vars(:,1:checked_tstepnum-1) = renew_timing_vars(:,2:checked_tstepnum)
+        output_timing_vars(:,1:checked_tstepnum-1) = output_timing_vars(:,2:checked_tstepnum)
+        output_timing_avr_vars(:,1:checked_tstepnum-1) = output_timing_avr_vars(:,2:checked_tstepnum)
+
+        saved_time(1:checked_tstepnum-1) = saved_time(2:checked_tstepnum)
+        saved_time(checked_tstepnum) = time
+
+        saved_tstep = checked_tstepnum
+        stime_index = saved_tstep
+
+      else
+        checked_tstepnum = checked_tstepnum + 1
+        saved_time(checked_tstepnum) = time
+
+        saved_tstep = checked_tstepnum
+        stime_index = saved_tstep
+      end if
+    end if
+
+    call DbgMessage( 'numvar=<%d:%d> in saved_tstep=<%d> will be checked from now.', &
+      & i =(/ startnum, endnum, saved_tstep /) )
+
+
+    ! それぞれのタイミングをチェックして各変数に格納
+    !
+    ! * ファイルオープン:      create_timing_vars
+    ! * ファイルクローズ:      close_timing_vars
+    ! * ファイルクローズ/作成: renew_timing_vars
+    ! * データ出力:            output_timing_vars
+    ! * データ平均化:          output_avr_timing_vars
+
+    create_timing_vars(startnum:endnum, checked_tstepnum:checked_tstepnum) = .false.
+    close_timing_vars(startnum:endnum, checked_tstepnum:checked_tstepnum) = .false.
+    renew_timing_vars(startnum:endnum, checked_tstepnum:checked_tstepnum) = .false.
+    output_timing_vars(startnum:endnum, checked_tstepnum:checked_tstepnum) = .false.
+    output_timing_avr_vars(startnum:endnum, checked_tstepnum:checked_tstepnum) = .false.
+
+    do i = startnum, endnum
+
+      if ( .not. output_valid_vars(i) ) cycle
+
+      if ( origin_time_vars(i) > time ) cycle
+
+      if (             origin_time_vars(i) <= time &
+        &  .and.       (      terminus_time_vars(i) < zero_time &
+        &                .or. terminus_time_vars(i) >= time      ) &
+        &  .and. .not. histaddvar_vars(i)            ) then
+
+        create_timing_vars(i,checked_tstepnum) = .true.
+
+        if ( newfile_inttime_vars(i) > zero_time ) then
+          newfile_createtime_vars(i) = time
+        end if
+
+        output_timing_vars(i,checked_tstepnum) = .true.
+        output_timing_avr_vars(i,checked_tstepnum) = tavr_vars(i)
+        cycle
+      end if
+
+      if ( terminus_time_vars(i) > zero_time .and. terminus_time_vars(i) < time ) then
+        close_timing_vars(i,checked_tstepnum) = .true.
+        output_timing_vars(i,checked_tstepnum) = .false.
+        output_timing_avr_vars(i,checked_tstepnum) = .false.
+        cycle
+      end if
+
+      ! * newfile_inttime_vars だけでは, ぴったり一致しないとうまく行かない.
+      !   * そこで...
+      !     * 前回に出力した時刻を記憶しておく.
+      !     * 前回の時刻と今回の時刻の差が newfile_inttime_vars
+      !       よりも大きい場合には現ファイルを閉じ, 新ファイルを作成する.
+
+      if ( newfile_inttime_vars(i) > zero_time ) then
+        if ( time - newfile_createtime_vars(i) >= newfile_inttime_vars(i) ) then
+          renew_timing_vars(i,checked_tstepnum) = .true.
+
+          output_timing_vars(i,checked_tstepnum) = .true.
+          output_timing_avr_vars(i,checked_tstepnum) = tavr_vars(i)
+
+          cycle
+        end if
+      end if
+
+      if ( time - prev_outtime_vars(i) >= interval_time_vars(i) ) then
+        output_timing_vars(i,checked_tstepnum) = .true.
+        output_timing_avr_vars(i,checked_tstepnum) = tavr_vars(i)
+        cycle
+      end if
+
+      output_timing_vars(i,checked_tstepnum) = .false.
+      output_timing_avr_vars(i,checked_tstepnum) = tavr_vars(i)
+
+    end do
+
+    checked_tstep_varnum = numvars
+
+999 continue
+    call StoreError(stat, subname, cause_c = cause_c)
+    call EndSub(subname)
+  end subroutine HstVarsOutputCheck
+
+  subroutine HstFileCreate( &
+    & gthist,  & ! (inout)
+    & varname, & ! (in)
+    & time &     ! (in)
+    & )
+    !
+    ! ファイル作成用内部サブルーチン
+    !
+    ! Internal subroutine for creation of files
+    !
+    use dc_trace, only: BeginSub, EndSub
+    use dc_error, only: StoreError, DC_NOERR, HST_EBADVARNAME, &
+      & HST_EBADSLICE, HST_EMPINOAXISDATA
+    use dc_calendar, only: DCCalConvertByUnit
+    use dc_date_types, only: DC_DIFFTIME
+    use dc_date, only: DCDiffTimeCreate, EvalbyUnit
+    use dc_string, only: CPrintf, StrInclude, toChar, JoinChar
+    use dc_message, only: MessageNotify
+    use gtool_history_nmlinfo_generic, only: &
+      & HstNmlInfoOutputValid, HstNmlInfoInquire, HstNmlInfoPutLine
+    use gtool_history, only: GT_HISTORY, &
+      & HistoryCreate, HistoryAddVariable, HistoryAddAttr, &
+      & HistoryInitialized, HistoryPut, HistoryPutAxisMPI, &
+      & HistoryAxisCreate, HistoryAxisInquire, HistoryAxisCopy, &
+      & HistoryVarinfoInquire, HistoryVarinfoCreate, &
+      & HistoryVarinfoCopy, HistoryVarinfoInitialized, &
+      & HistoryVarinfoClear
+
+    implicit none
+    type(GT_HISTORY), intent(inout):: gthist
+                              ! gtool_history モジュール用構造体.
+                              ! Derived type for "gtool_history" module
+    character(*), intent(in):: varname
+                              ! 変数の名前.
+                              ! Variable name
+    real(DP), intent(in):: time
+                              ! 現在時刻. Current time
+
+    character(TOKEN):: interval_unit
+                              ! データの出力間隔の単位.
+                              ! Unit for interval of history data output
+    real(DP):: origin_value
+                              ! データの出力開始時刻の数値.
+                              ! Numerical value for start time of history data output
+    character(TOKEN):: origin_unit
+                              ! データの出力開始時刻の単位.
+                              ! Unit for start time of history data output
+
+    real(DP):: origin_sec
+    integer:: newfile_intvalue
+    real(DP):: newfile_intvalued
+                              ! ファイル分割時間間隔.
+                              ! Interval of time of separation of a file.
+    character(TOKEN):: newfile_intunit
+                              ! ファイル分割時間間隔の単位.
+                              ! Unit of interval of time of separation of a file.
+
+    character(STRING):: file, file_base, file_suffix, file_newfile_time, file_rank
+                              ! 出力ファイル名.
+                              ! Output file name.
+    integer:: stat, i, j, k, vnum, numdims_slice, dim_size, cnt
+    character(STRING):: name, units, longname, cause_c, wgt_name
+    character(TOKEN):: xtype
+    type(GT_HISTORY_AXIS):: gthst_axes_time
+    type(GT_HISTORY_AXIS), pointer:: gthst_axes_slices(:) =>null()
+    type(GT_HISTORY_AXIS_DATA), pointer:: data_axes_slices(:) =>null()
+    type(GT_HISTORY_AXIS_DATA), pointer:: data_weights_slices(:) =>null()
+    real(DP):: wgt_sum, wgt_sum_s
+    logical:: slice_valid
+    integer:: slice_start(1:numdims-1)
+                              ! 空間方向の開始点.
+                              ! Start points of spaces.
+    integer:: slice_end(1:numdims-1)
+                              ! 空間方向の終了点.
+                              ! End points of spaces.
+    integer:: slice_stride(1:numdims-1)
+                              ! 空間方向の刻み幅.
+                              ! Strides of spaces
+
+    character(*), parameter:: subname = "HstFileCreate"
+  continue
+    call BeginSub(subname, 'varname=%c', c1 = trim(varname) )
+    stat = DC_NOERR
+    cause_c = ""
+
+    ! varname から変数情報の探査
+    ! Search information of a variable from "varname"
+    !
+    vnum = 0
+    do i = 1, numvars
+      call HistoryVarinfoInquire( &
+        & varinfo = gthst_vars(i), &  ! (in)
+        & name = name )               ! (out)
+      if ( trim(varname) == trim(name) ) vnum = i
+    end do
+
+    if ( vnum == 0 ) then
+      stat = HST_EBADVARNAME
+      cause_c = varname
+      goto 999
+    end if
+
+    ! 出力が有効かどうかを確認する
+    ! Confirm whether the output is effective
+    !
+    if ( .not. HstNmlInfoOutputValid( gthstnml, varname ) ) then
+      goto 999
+    end if
+
+    ! 出力間隔の単位に応じて時間座標情報の作り直し
+    ! Remake time axis information correspond to units of output interval
+    !
+    call HstNmlInfoInquire( &
+      & gthstnml = gthstnml, &                 ! (in)
+      & name = varname, &                      ! (in)
+      & file = file, &                         ! (out)
+      & interval_unit  = interval_unit )       ! (out)
+
+    call HistoryAxisCopy( &
+      & gthst_axes_time, &     ! (out)
+      & gthst_axes(numdims), & ! (in)
+      & units = trim(interval_unit) // ' ' // &
+      &         trim(time_unit_suffix) ) ! (in)
+
+    ! 空間方向のスライスに対応して, 座標および座標重み情報の作り直し
+    ! Remake axes and weights information correspond to spatial slices
+    !
+    call HstNmlInfoInquire( &
+      & gthstnml = gthstnml, &         ! (in)
+      & name = varname, &              ! (in)
+      & slice_start = slice_start, &   ! (out)
+      & slice_end = slice_end, &       ! (out)
+      & slice_stride = slice_stride )  ! (out)
+
+    ! ファイルが未作成の場合は, まずファイル作成
+    ! At first, the file is created if the file is not created yet
+    !
+    if ( .not. HistoryInitialized( gthist ) ) then
+
+      if (       all( slice_start  == (/ ( 1, i = 1, numdims -1 ) /) ) &
+        &  .and. all( slice_end    <  (/ ( 1, i = 1, numdims -1 ) /) ) &
+        &  .and. all( slice_stride == (/ ( 1, i = 1, numdims -1 ) /) )  ) then
+
+        allocate( gthst_axes_slices (1:numdims) )
+        gthst_axes_slices(1:numdims-1)     = gthst_axes(1:numdims-1)
+        gthst_axes_slices(numdims:numdims) = gthst_axes_time
+
+        data_axes_slices               => data_axes
+        data_weights_slices            => data_weights
+        slice_valid = .false.
+
+      else
+        allocate( gthst_axes_slices    (1:numdims) )
+        allocate( data_axes_slices     (1:numdims) )
+        allocate( data_weights_slices  (1:numdims) )
+
+        do i = 1, numdims-1
+
+          ! スライス値の有効性をチェック
+          ! Check validity of slices
+          !
+          if ( slice_start(i) < 1 ) then
+            stat = HST_EBADSLICE
+            cause_c = CPrintf('slice_start=%d', &
+              &         i = (/ slice_start(i) /) )
+            goto 999
+          end if
+
+          if ( slice_stride(i) < 1 ) then
+            stat = HST_EBADSLICE
+            cause_c = CPrintf('slice_stride=%d', &
+              &         i = (/ slice_stride(i) /) )
+            goto 999
+          end if
+
+          ! 再生成の必要性をチェック
+          ! Check necessity of remaking
+          !
+          if (       ( slice_start(i)  == 1 ) &
+            &  .and. ( slice_end(i)    <  1 ) &
+            &  .and. ( slice_stride(i) == 1 )  ) then
+
+            call HistoryAxisCopy( &
+              & axis_dest = gthst_axes_slices(i) , &  ! (out)
+              & axis_src  = gthst_axes(i) )           ! (in)
+
+            data_axes_slices (i) = data_axes (i)
+
+            cycle
+          end if
+
+          ! 座標情報の再生成
+          ! Remake information of axis
+          !
+          call HistoryAxisInquire( &
+            & axis = gthst_axes(i), &  ! (in)
+            & name = name, &           ! (out)
+            & size = dim_size, &       ! (out)
+            & longname = longname, &   ! (out)
+            & units = units, &         ! (out)
+            & xtype = xtype )          ! (out)
+
+          ! 終点のスライス値の補正 ; Correct end points of slices
+          if ( slice_end(i) < 1 ) slice_end(i) = dim_size
+          if ( slice_end(i) > dim_size ) then
+            call MessageNotify( 'W', subname, &
+              & 'slice options to (%c) are undesirable ' // &
+              & '(@slice_end=%d). @slice_end is corrected forcibly to (%d) ', &
+              & c1 = trim(name), &
+              & i = (/ slice_end(i), dim_size /) )
+
+            slice_end(i) = dim_size
+          end if
+
+          ! スライス値の有効性をチェック ; Check validity of slices
+          if ( slice_start(i) > slice_end(i) ) then
+            stat = HST_EBADSLICE
+            cause_c = CPrintf('slice_start=%d, slice_end=%d', &
+              &         i = (/ slice_start(i), slice_end(i) /) )
+            goto 999
+          end if
+
+          numdims_slice = int( ( slice_end(i) - slice_start(i) + 1 ) / slice_stride(i) )
+
+          ! スライス値の有効性をチェック ; Check validity of slices
+          if ( numdims_slice < 1 ) then
+            call MessageNotify( 'W', subname, &
+              & 'slice options to (%c) are invalid. ' // &
+              & '(@slice_start=%d @slice_end=%d @slice_stride=%d)', &
+              & c1 = trim(name), &
+              & i = (/ slice_start(i), slice_end(i), slice_stride(i) /) )
+            stat = HST_EBADSLICE
+            cause_c = CPrintf('slice_start=%d, slice_end=%d, slice_stride=%d', &
+              &         i = (/ slice_start(i), slice_end(i), slice_stride(i) /) )
+            goto 999
+          end if
+
+          call HistoryAxisCreate( &
+            & axis = gthst_axes_slices(i), &  ! (out)
+            & name = name, &                  ! (in)
+            & size = numdims_slice, &         ! (in)
+            & longname = longname, &          ! (in)
+            & units = units, &                ! (in)
+            & xtype = xtype )                 ! (in)
+
+
+          ! 座標データの再生成
+          ! Regenerate data of axis
+          !
+          allocate( data_axes_slices(i) % a_axis( numdims_slice ) )
+          cnt = 1
+          do j = slice_start(i), slice_end(i), slice_stride(i)
+            data_axes_slices(i) % a_axis( cnt ) = data_axes(i) % a_axis( j )
+            cnt = cnt + 1
+          end do
+
+          ! 座標重みデータの再生成
+          ! Remake information of axis data
+          !
+          do j = 1, numwgts
+            call HistoryVarinfoInquire( &
+              & varinfo = gthst_weights(j), & ! (in)
+              & name = wgt_name )             ! (out) optional
+
+            if ( trim(name) // wgtsuf == trim(wgt_name) ) then
+
+              ! 座標重みの計算は結構いい加減...
+              ! Calculation about axis weight is irresponsible...
+              !
+              wgt_sum = sum( data_weights(j) % a_axis )
+
+              allocate( data_weights_slices(j) % a_axis( numdims_slice ) )
+              cnt = 1
+              do k = slice_start(i), slice_end(i), slice_stride(i)
+                data_weights_slices(j) % a_axis( cnt ) = data_weights(j) % a_axis( k )
+                cnt = cnt + 1
+              end do
+
+              wgt_sum_s = sum( data_weights_slices(j) % a_axis )
+              data_weights_slices(j) % a_axis = data_weights_slices(j) % a_axis * ( wgt_sum / wgt_sum_s )
+
+            end if
+
+          end do
+
+        end do
+
+        ! 空間切り出しされていない座標に関する座標重みデータを作成
+        ! Make data of axis weight not sliced
+        !
+        do i = 1, numwgts
+          if ( .not. associated( data_weights_slices(i) % a_axis ) ) then
+            allocate( data_weights_slices(i) % a_axis( size(data_weights(i) % a_axis ) ) )
+            data_weights_slices(i) % a_axis = data_weights (i) % a_axis
+          end if
+        end do
+
+        ! 時刻次元のコピー
+        ! Copy time dimension
+        !
+        gthst_axes_slices(numdims) = gthst_axes_time
+
+        slice_valid = .true.
+      end if
+
+      ! HistoryCreate のための設定値の取得
+      ! Get the settings for "HistoryCreate"
+      !
+      call HstNmlInfoInquire( &
+        & gthstnml = gthstnml, &                 ! (in)
+        & name = varname, &                      ! (in)
+        & file = file, &                         ! (out)
+        & origin_value   = origin_value, &       ! (out)
+        & origin_unit    = origin_unit, &        ! (out)
+        & interval_unit  = interval_unit, &      ! (out)
+        & newfile_intvalue = newfile_intvalue, & ! (out)
+        & newfile_intunit = newfile_intunit )    ! (out)
+
+      ! データ出力時刻の設定
+      ! Configure data output time
+      !
+      origin_sec = &
+        & DCCalConvertByUnit( &
+        &   real( origin_value, DP ), origin_unit, 'sec', cal_save )
+
+!!$      ! dc_date モジュール使用時
+!!$      !
+!!$      call DCDiffTimeCreate( &
+!!$        & origin_sec, &           ! (out)
+!!$        & origin_value, origin_unit )  ! (in)
+
+      if ( newfile_intvalue < 1 ) then
+
+        origin_value = DCCalConvertByUnit( &
+          & origin_sec, 'sec', interval_unit, cal_save )
+
+!        origin_value = EvalbyUnit( origin_sec, interval_unit )
+      else
+
+        origin_value = &
+          & DCCalConvertByUnit( time, 'sec', interval_unit, cal_save )
+
+!        origin_value = EvalbyUnit( time, interval_unit )
+      end if
+
+      ! ファイル名の設定
+      ! Configure file name
+      !
+      if ( len_trim( file ) - index(file, '.nc', .true.) == 2 ) then
+        file_base = file(1:len_trim( file ) - 3)
+        file_suffix = '.nc'
+      else
+        file_base = file
+        file_suffix = ''
+      end if
+      if ( trim(rank_save) == '' ) then
+        file_rank = ''
+      else
+        file_rank = '_rank' // trim( adjustl(rank_save) )
+      end if
+      if ( newfile_intvalue > 0 ) then
+        newfile_intvalued = &
+          & DCCalConvertByUnit( time, 'sec', newfile_intunit, cal_save )
+
+        file_newfile_time = &
+          & CPrintf( '_time%08d', i = (/ int( newfile_intvalued ) /) )
+!          &   i = (/ int( EvalbyUnit( time, newfile_intunit ) ) /) )
+      else
+        file_newfile_time = ''
+      end if
+
+      file = trim(file_base) // trim(file_rank) // trim(file_newfile_time) // trim(file_suffix)
+
+      ! HistoryCreate によるファイル作成
+      ! Files are created by "HistoryCreate"
+      !
+      call HistoryCreate( &
+        & history = gthist, &                                     ! (inout)
+        & file = file, title = title_save, &                      ! (in)
+        & source = source_save, institution = institution_save, & ! (in)
+        & axes = gthst_axes_slices(1:numdims), &                  ! (in)
+        & origind = origin_value, &                               ! (in)
+        & conventions = conventions_save, &                       ! (in)
+        & gt_version = gt_version_save, &                         ! (in)
+        & flag_mpi_split = save_mpi_split, &                      ! (in)
+        & flag_mpi_gather = save_mpi_gather )                     ! (in)
+
+      ! 座標データを出力
+      ! Output axes data
+      !
+      do i = 1, numdims - 1
+        call HistoryAxisInquire( &
+          & axis = gthst_axes_slices(i), &  ! (in)
+          & name = name )                   ! (out)
+        call HistoryPut( &
+          & history = gthist, &                    ! (inout) optional
+          & varname = name, &                      ! (in)
+          & array = data_axes_slices(i) % a_axis ) ! (in)
+      end do
+
+      ! MPI 用に領域全体の座標データを出力
+      ! Output axes data in whole area for MPI
+      !
+      if ( save_mpi_gather ) then
+        do i = 1, numdims - 1
+          call HistoryAxisInquire( &
+            & axis = gthst_axes_slices(i), &  ! (in)
+            & name = name )                   ! (out)
+
+          if ( .not. associated( data_axes_whole(i) % a_axis ) ) then
+            call MessageNotify('W', subname, &
+              & 'data of axis (%c) in whole area is lack. ' // &
+              & 'Specify the data by "HistoryAutoPutAxisMPI" explicitly.', &
+              & c1 = trim(name) )
+            stat = HST_EMPINOAXISDATA
+            cause_c = name
+          end if
+
+          call HistoryPutAxisMPI( &
+            & history = gthist, &                   ! (inout) optional
+            & varname = name, &                     ! (in)
+            & array = data_axes_whole(i) % a_axis ) ! (in)
+        end do
+      end if
+
+      ! 割付解除
+      ! Deallocation
+      !
+      if ( slice_valid ) then
+        deallocate( gthst_axes_slices )
+        deallocate( data_axes_slices )
+      else
+        deallocate( gthst_axes_slices )
+        nullify( data_axes_slices )
+      end if
+
+      ! 座標重みデータを追加
+      ! Add axes weights data
+      !
+      do i = 1, numwgts
+        call HistoryAddVariable( &
+          & history = gthist, &           ! (inout)
+          & varinfo = gthst_weights(i) )  ! (in)
+        call HistoryVarinfoInquire( &
+          & varinfo = gthst_weights(i), &  ! (in)
+          & name = name )                  ! (out)
+        call HistoryPut( &
+          & history = gthist, &                       ! (inout) optional
+          & varname = name, &                         ! (in)
+          & array = data_weights_slices(i) % a_axis ) ! (in)
+      end do
+
+      if ( slice_valid ) then
+        deallocate( data_weights_slices )
+      else
+        nullify( data_weights_slices )
+      end if
+
+    ! ファイル作成おしまい; Creation of file is finished
+    end if
+
+
+    ! 変数情報を追加
+    ! Add information of variables
+    !
+    call HistoryAddVariable( &
+      & varinfo = gthst_vars(vnum), &  ! (in)
+      & history = gthist )             ! (inout) optional
+
+999 continue
+    call StoreError(stat, subname, cause_c = cause_c)
+    call EndSub(subname)
+  end subroutine HstFileCreate
+
+__EndOfFortran90Code__
+
+
+def make_array_colon_i(int, iint, char)
+  return unless int
+  return unless iint
+#STDERR.print int, ", ", iint, "\n"
+#STDERR.print int.class, ", ", iint.class, "\n"
+  return if int < 1
+  return "(#{char})" if int < 2
+  int -= 1
+  if iint == 1
+    body = "(#{char}"
+  else
+    body = "(:"
+  end
+  count = 2
+  int.times{
+    if iint == count
+      body << ",#{char}"
+    else
+      body << ",:"
+    end
+    count += 1
+  }
+  body << ")"
+#STDERR.print body, "\n"
+  return body
+end
+
+def array_collon_i(num, body)
+  rbody = ""
+  lines = body.split(/\n/)
+  lines.each{ |l|
+    if l =~ /(\$array_collon_i([0-9]+)\$)/
+      iint = $2.to_i
+      collon = make_array_colon_i(num, iint, 'i')
+      rbody << l.gsub(/\$array_collon_i([0-9]+)\$/, collon)
+    else
+      rbody << l
+    end
+    rbody << "\n"
+  }
+  return rbody
+end
+
+def array_collon_1(num, body)
+  rbody = ""
+  lines = body.split(/\n/)
+  lines.each{ |l|
+    if l =~ /(\$array_collon_1([0-9]+)\$)/
+      iint = $2.to_i
+      collon = make_array_colon_i(num, iint, '1')
+      rbody << l.gsub(/\$array_collon_1([0-9]+)\$/, collon)
+    else
+      rbody << l
+    end
+    rbody << "\n"
+  }
+  return rbody
+end
+
+types = ["Real", "Double", "Int"]
+types.each{ |type|
+for num in 1..$histput_dim
+print <<"__EndOfFortran90Code__"
+
+  subroutine AverageReduce#{type}#{num}( &
+    & array, space_average, &     ! (in)
+                    #{forloop("\\$num\\$", 1, num, %Q{
+    & weight$num$, &  ! (in)
+                    })}
+    & array_avr &                 ! (out)
+    )
+    !
+    ! space_average で .true. に指定された次元に対して,
+    ! array を平均化して array_avr に返します.
+    ! 平均化には重み weight1 〜 weight#{$histput_dim} が用いられます.
+    ! array_avr の配列の次元そのものは減りません. その代わり,
+    ! 平均化された次元の配列のサイズは 1 になります.
+    !
+    implicit none
+    #{$type_intent_in[type]}, intent(in), target:: array#{array_colon("#{num}")}
+    logical, intent(in):: space_average(#{num})
+                    #{forloop("\\$num\\$", 1, num, %Q{
+    real(DP), intent(in):: weight$num$(:)
+                    })}
+    #{$type_intent_in[type]}, pointer:: array_avr#{array_colon("#{num}")} ! (out)
+
+    #{$type_intent_in[type]}, pointer:: array_avr_work#{array_colon("#{num}")}
+
+                    #{forloop("\\$num\\$", 1, num, %Q{
+    #{$type_intent_in[type]}, pointer:: array_avr_work$num$#{array_colon("#{num}")}
+                    })}
+
+    integer:: array_shape(#{num})
+    integer:: i, dim_size
+    real(DP):: weight_sum
+  continue
+
+    array_shape = shape( array )
+    array_avr_work => array
+
+                    #{array_collon_1(num, %Q{
+                      #{array_collon_i(num, %Q{
+                        #{forloop("\\$num\\$", 1, num, %Q{
+
+    if ( space_average($num$) ) then
+      dim_size = array_shape($num$)
+      array_shape($num$) = 1
+      allocate( array_avr_work$num$( array_shape(1) &
+                          #{forloop("\\$numary\\$", 2, num, %Q{
+        & , array_shape($numary$) &
+                          })}
+        &  ) )
+      array_avr_work$num$ = 0#{$type_numsuf[type]}
+      weight_sum = 0.0_DP
+      do i = 1, dim_size
+        array_avr_work$num$$array_collon_1$num$$ = array_avr_work$num$$array_collon_1$num$$ + array_avr_work$array_collon_i$num$$ * weight$num$(i)
+        weight_sum = weight_sum + weight$num$(i)
+      end do
+      array_avr_work$num$ = array_avr_work$num$ / weight_sum
+      array_avr_work  => array_avr_work$num$
+    end if
+
+                        })}
+                      })}
+                    })}
+
+      allocate( array_avr( array_shape(1) &
+                    #{forloop("\\$num\\$", 2, num, %Q{
+        & , array_shape($num$) &
+                    })}
+        & ) )
+
+      array_avr = array_avr_work
+
+      nullify( array_avr_work )
+
+                    #{forloop("\\$num\\$", 1, num, %Q{
+      if ( associated( array_avr_work$num$ ) ) deallocate( array_avr_work$num$ )
+                    })}
+
+  end subroutine AverageReduce#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFortran90Code__"
+
+end module gtool_historyauto_internal
+
+__EndOfFortran90Code__
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

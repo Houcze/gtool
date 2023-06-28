@@ -1,0 +1,189 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+#
+# "historyaddattr.F90" Generator with Ruby.
+#
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= GT_HISTORY_VARINFO への属性付加
+!= Add attributes to GT_HISTORY_VARINFO
+!
+! Authors::   Yasuhiro MORIKAWA
+! Version::   $Id: historyvarinfoaddattr.rb2f90,v 1.2 2009-05-25 09:45:19 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2000-2009. All rights reserved.
+! License::   See COPYRIGHT[link:../../../COPYRIGHT]
+!
+__EndOfFortran90Code__
+
+types = ["Char", "Logical", "Int", "Real", "Double"]
+def toChar(type, value)
+  return "trim(#{value})" if type == "Char"
+  return "trim(toChar(#{value}))"
+end
+def Num2Array(type, value)
+  return value if type == "Char"
+  return value if type == "Logical"
+  return "(/#{value}/)"
+end
+types.each{ |type|
+for num in 0..1
+next if num == 1 && type == "Char"
+next if num == 1 && type == "Logical"
+print <<"__EndOfFortran90Code__"
+
+  subroutine HistoryVarinfoAddAttr#{type}#{num}( &
+    & varinfo, attrname, value, err )
+    !
+                    #{ifelse(type, "Char", %Q{
+    !
+    !== GT_HISTORY_VARINFO 型変数への属性付加
+    !
+    ! GT_HISTORY_VARINFO 型の変数 *varinfo* へ属性を付加します。
+    !
+    ! *HistoryVarinfoAddAttr* は複数のサブルーチンの総称名です。
+    ! value には様々な型の引数を与えることが可能です。
+    ! 下記のサブルーチンを参照ください。
+    !
+                    })}
+    !
+    use gtool_history_generic, only: HistoryVarinfoInquire
+    use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO, GT_HISTORY_ATTR
+    use gtool_history_internal, only: default, copy_attrs
+    use gtdata_generic, only: Put_Attr
+    use dc_string, only: toChar, JoinChar
+    use dc_url, only: GT_PLUS
+    use dc_error, only: StoreError, DC_NOERR, DC_ENOTINIT
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_types, only: STRING, TOKEN, DP
+    implicit none
+    type(GT_HISTORY_VARINFO),intent(inout) :: varinfo
+    character(*), intent(in):: attrname ! 属性の名前
+    #{$type_intent_in[type]}, intent(in):: value#{array_colon("#{num}")}
+                    #{ifelse(type, "Char", %Q{
+                              ! 属性に与えられる値
+                              ! 
+                              ! 配列の場合でも、数値型以外
+                              ! では配列の 1 つ目の要素のみ
+                              ! 値として付加されます。
+                              ! 
+                    })}
+    logical, intent(out), optional:: err
+                              ! 例外処理用フラグ. 
+                              ! デフォルトでは, この手続き内でエラーが
+                              ! 生じた場合, プログラムは強制終了します. 
+                              ! 引数 *err* が与えられる場合, 
+                              ! プログラムは強制終了せず, 代わりに
+                              ! *err* に .true. が代入されます. 
+                              !
+                              ! Exception handling flag. 
+                              ! By default, when error occur in 
+                              ! this procedure, the program aborts. 
+                              ! If this *err* argument is given, 
+                              ! .true. is substituted to *err* and 
+                              ! the program does not abort. 
+
+    type(GT_HISTORY_ATTR), pointer:: attrs_tmp(:)
+    integer:: attrs_num, stat
+    character(STRING) :: name, cause_c
+    character(*), parameter:: subname = "HistoryVarinfoAddAttr#{type}#{num}"
+  continue
+    call BeginSub(subname, &
+      & 'attrname=<%c>, value=<%c>', &
+      & c1=trim(attrname), c2=#{toChar(type, "value")})
+    stat = DC_NOERR
+    cause_c = ''
+
+    if ( .not. varinfo % initialized ) then
+      stat = DC_ENOTINIT
+      cause_c = 'GT_HISTORY_VARINFO'
+      goto 999
+    end if
+
+    call HistoryVarinfoInquire( varinfo, name )
+    call DbgMessage('varinfo name=<%c>', c1=trim(name))
+
+    ! これまでの属性を保持しつつ配列を1つ増やす
+    if ( .not. associated(varinfo % attrs) ) then
+      allocate( varinfo % attrs(1) )
+      attrs_num = 1
+    else
+      attrs_num = size( varinfo % attrs ) + 1
+      ! 配列データの領域確保
+      allocate( attrs_tmp(attrs_num - 1) )
+      call copy_attrs( from = varinfo % attrs(1:attrs_num - 1), &
+        &                to = attrs_tmp(1:attrs_num - 1))
+      deallocate( varinfo % attrs )
+      allocate( varinfo % attrs(attrs_num) )
+      call copy_attrs( from = attrs_tmp(1:attrs_num - 1), &
+        &                to = varinfo % attrs(1:attrs_num - 1))
+      deallocate( attrs_tmp )
+    endif
+
+    varinfo % attrs(attrs_num) % attrname  = attrname
+    varinfo % attrs(attrs_num) % attrtype  = '#{type}'
+                    #{ifelse(num, 0, %Q{
+    varinfo % attrs(attrs_num) % array     = .false.
+    varinfo % attrs(attrs_num) % #{type}value = value
+                    }, num, 1, %Q{
+    varinfo % attrs(attrs_num) % array                = .true.
+    allocate(  varinfo % attrs(attrs_num) % #{type}array( size(value) )  )
+    varinfo % attrs(attrs_num) % #{type}array    = value
+                    })}
+
+999 continue
+    call StoreError( stat, subname, err, cause_c )
+    call EndSub(subname)
+  end subroutine HistoryVarinfoAddAttr#{type}#{num}
+
+  !-------------------------------------------------------------------
+
+  subroutine HistoryVarinfoAddAttr2#{type}#{num}( &
+    & varinfo, attrname, value, err )
+    !
+                    #{ifelse(type, "Char", %Q{
+    !
+    ! 使用方法は HistoryVarinfoAddAttr と同様です. 
+    !
+    ! Usage is same as "HistoryVarinfoAddAttr".
+    !
+    !--
+    ! 総称名 Put_Attr として提供するための関数です. 
+    ! 機能は HistoryVarinfoAttr と同じです. 
+    !++
+                    })}
+    !
+    use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO, GT_HISTORY_ATTR
+    use gtool_history_generic, only: HistoryVarinfoAddAttr
+    use gtdata_generic, only: Put_Attr
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_types, only: DP
+    implicit none
+    type(GT_HISTORY_VARINFO),intent(inout) :: varinfo
+    character(*), intent(in):: attrname ! 属性の名前
+    #{$type_intent_in[type]}, intent(in):: value#{array_colon("#{num}")}
+    logical, intent(out), optional:: err
+    character(*), parameter:: subname = "HistoryVarinfoAddAttr2#{type}#{num}"
+  continue
+    call BeginSub(subname)
+    call HistoryVarinfoAddAttr( &
+      & varinfo, attrname, value, err )
+    call EndSub(subname)
+  end subroutine HistoryVarinfoAddAttr2#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

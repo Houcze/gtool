@@ -1,0 +1,123 @@
+#!/usr/bin/env ruby
+# -*- f90 -*- 
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+#
+# "historyautoputaxis.f90" Generator with Ruby.
+#
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= 座標データの設定
+!= Settings of data of axes. 
+!
+! Authors::   Yasuhiro MORIKAWA
+! Version::   $Id: historyautoputaxis.rb2f90,v 1.1 2009-05-10 12:19:17 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2008-2009. All rights reserved. 
+! License::   See COPYRIGHT[link:../../../COPYRIGHT]
+!
+__EndOfFortran90Code__
+
+
+types = ["Real", "Double", "Int"]
+types.each{ |type|
+print <<"__EndOfFortran90Code__"
+
+  subroutine HistoryAutoPutAxis#{type}( &
+    & dim, array &  ! (in)
+    & )
+    !
+    ! 座標データを設定します. 
+    !
+    ! Set data of an axis. 
+    !
+
+    use gtool_historyauto_internal, only: initialized, numdims, data_axes, gthst_axes
+    use gtool_history, only: HistoryAxisInquire, HistoryAxisAddAttr, &
+      &                    HistoryVarinfoCreate
+    use dc_trace, only: BeginSub, EndSub
+    use dc_error, only: StoreError, DC_NOERR, &
+      & GT_EARGSIZEMISMATCH, HST_ENOAXISNAME, DC_ENOTINIT
+    use dc_types, only: DP, STRING, TOKEN
+
+    implicit none
+    character(*), intent(in):: dim
+                              ! 座標の名称. 
+                              !
+                              ! ただし, ここで指定するもの
+                              ! は, HistoryAutoCreate の *dims*
+                              ! 既に指定されていなければなりません.
+                              !
+                              ! Name of axis. 
+                              !
+                              ! Note that this value must be set 
+                              ! as "dims" of "HistoryAutoCreate". 
+                              !
+    #{$type_intent_in[type]}, intent(in):: array(:)
+                              ! 座標データ
+                              !
+                              ! データ型は整数, 単精度実数型, 
+                              ! 倍精度実数型のどれでもかまいません. 
+                              ! ただし, ファイルへ出力される際には, 
+                              ! HistoryAutoCreate の *xtypes* で指定した
+                              ! データ型へ変換されます. 
+                              ! 
+                              ! Data of axis
+                              !
+                              ! Integer, single or double precision are 
+                              ! acceptable as data type. 
+                              ! Note that when this is output to a file, 
+                              ! data type is converted into "xtypes" 
+                              ! specified in "HistoryAutoCreate"
+                              ! 
+
+    character(STRING):: name
+    integer:: stat, i
+    character(STRING):: cause_c
+    character(*), parameter:: subname = "HistoryAutoPutAxis#{type}"
+  continue
+    call BeginSub(subname, 'dim=<%c>', c1=trim(dim) )
+    stat = DC_NOERR
+    cause_c = ""
+
+    ! 初期設定チェック
+    ! Check initialization
+    !
+    if ( .not. initialized ) then
+      stat = DC_ENOTINIT
+      cause_c = 'gtool_historyauto'
+      goto 999
+    end if
+
+    do i = 1, numdims
+      call HistoryAxisInquire( &
+        & axis = gthst_axes(i), &  ! (in)
+        & name = name )            ! (out)
+      if ( trim(dim) == trim(name) ) then
+        data_axes(i) % a_axis = array
+        goto 999
+      end if
+    end do
+
+    stat = HST_ENOAXISNAME
+    cause_c = dim
+
+999 continue
+    call StoreError(stat, subname, cause_c = cause_c)
+    call EndSub(subname)
+  end subroutine HistoryAutoPutAxis#{type}
+
+
+__EndOfFortran90Code__
+}
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

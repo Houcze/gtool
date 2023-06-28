@@ -1,0 +1,310 @@
+/*
+= Cascade Style Sheet for gtool5 Reference Manuals
+
+Authors::   Yasuhiro MORIKAWA
+Version::   $Id: gtool5.css,v 1.2 2009-03-31 11:02:28 morikawa Exp $
+Tag Name::  $Name:  $
+Copyright:: Copyright (C) GFD Dennou Club, 2005-2008. All rights reserved.
+License::   See COPYRIGHT[link:COPYRIGHT]
+*/
+
+
+a:link {
+  color: #000080;
+}
+
+a:visited {
+  color: #800080;
+}
+
+a:active {
+  color: #FF0000;
+}
+
+/*
+a:hover {
+  color: #99CCCC;
+}
+*/
+
+body {
+  font-family: verdana, arial, helvetica, Sans-Serif;
+  background-color: #C0F0C0; 
+  color: #000000;
+  margin-left: 5%;
+  margin-right: 5%;
+  line-height: 110%;
+}
+
+
+/*
+table {
+  table-border-color-light: rgb(153,204,153);
+  table-border-color-dark:  rgb(153,204,153);
+  margin-left: 4ex;
+  margin-right: 1ex;
+  margin-top:0.5ex;
+  margin-bottom:0.5ex;
+}
+*/
+
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: Arial;
+}
+
+h1 {
+  font-family: "times roman", verdana, sans-serif;
+  text-align: center;
+  color: #FFFFFF;
+  background: #338833;
+  border-top: #338833 4px solid;
+  border-bottom: #338833 4px solid;
+  line-height: 120%;
+}
+
+
+h2 {
+  border-left:  #99ff99 0.6em solid;
+  border-bottom: #00ff99 5px solid;
+  margin-right: 30%;
+  line-height: 120%;
+}
+
+h3 {
+  color: #208050;
+  border-bottom: #000066 1px solid;
+  margin-left: 15px;
+  margin-right: 50%;
+  margin-top:2ex;
+  margin-bottom:0ex;
+}
+
+h4 {
+  color: #000000;
+  margin-left: 20px;
+  /* padding-top: 0.2em;
+     padding-left: 0.5em;
+     border-top: #000066 1px solid; 
+     border-left: #006600 5px solid;
+     margin-left: 35px;
+     margin-right: 50%; */
+}
+
+h5 {
+  color: rgb(204,153,51);
+  /* margin-left: 4ex; */
+  margin-right: 1ex;
+}
+
+h6 {
+  color: rgb(153,153,51);
+  /* margin-left: 5ex; */
+  margin-right: 1ex;
+}
+
+pre {
+  border-right: #646464 1px solid;
+  padding-right: 0.5em;
+  border-top: #646464 1px solid;
+  padding-top: 0.5em;
+  border-left: #646464 1px solid;
+  padding-left: 0.5em;
+  border-bottom: #646464 1px solid;
+  padding-bottom: 0.5em;
+  margin-left: 4em;
+  margin-right: 2em;
+  white-space: pre;
+  background-color: #E6E6E6;
+  color: black;
+}
+
+ul pre {
+  margin-left: 2em;
+}
+
+ol pre {
+  margin-left: 2em;
+}
+
+dd pre {
+  margin-left: 2em;
+}
+
+p {
+  text-indent: 0;
+  margin-left: 2em;
+  margin-right: 1ex;
+  /* margin-top:3ex; */
+  /* margin-bottom:3ex; */
+  line-height:150%;
+}
+
+ul p {
+  margin-left: 0em;
+  padding: 0;
+}
+
+ol p {
+  margin-left: 0em;
+  padding: 0;
+}
+
+ul {
+  margin-left: 3em;
+  margin-top:1.0ex;
+  margin-bottom:0.5ex;
+  line-height:100%;
+  padding: 0;
+}
+
+ul ul {
+  margin-left: 1.5em;
+  margin-top:0.0ex;
+  padding: 0;
+}
+
+ul ol {
+  margin-left: 1.5em;
+  padding: 0;
+}
+
+ul li {
+  margin-top:0.0ex;
+  margin-bottom:0.0ex;
+  line-height:150%;
+  padding: 0;
+}
+
+ol {
+  margin-left: 4em;
+  padding: 0;
+}
+
+ol ul {
+  margin-left: 1.5em;
+  padding: 0;
+}
+
+ol ol {
+  margin-left: 1.5em;
+  padding: 0;
+}
+
+ol li {
+  margin-top:0.0ex;
+  margin-bottom:0.0ex;
+  line-height:150%;
+  padding: 0;
+}
+
+ol.contents {
+  font-size: 80%;
+  margin-left: 0ex;
+  margin-right: 0ex;
+  margin-top: 0ex;
+  margin-bottom: 0ex;
+  line-height: 100%;
+  padding: 0;
+}
+
+ol.rd2html_hindex {
+  font-size: 80%;
+  list-style-type: decimal;
+  margin-left: 5em;
+  margin-right: 0ex;
+  margin-top: 0ex;
+  margin-bottom: 0ex;
+  line-height: 100%;
+  padding: 0;
+}
+
+ol.rd2html_hindex ul {
+  font-size: 100%;
+  list-style-type: decimal;
+  margin-left: 3em;
+  margin-right: 0ex;
+  margin-top: 0ex;
+  margin-bottom: 0ex;
+  line-height: 100%;
+  padding: 0;
+}
+
+dt {
+  font-weight: bold;
+  margin-left: 1em;
+  margin-top: 1ex;
+  margin-bottom: 0.2ex;
+  padding: 0;
+}
+
+dl {
+  margin-left: 1em;
+  padding: 0;
+}
+
+dd p {
+  margin-left: 0em;
+  padding: 0;
+}
+
+dd ul {
+  margin-left: 1em;
+  padding: 0;
+}
+
+dd ol {
+  margin-left: 1em;
+  padding: 0;
+}
+
+em {
+  font-style: normal;
+  font-weight: bold;
+  font-size: 100%;
+  color: #000099;
+}
+
+
+.update {
+  font-size:80%;
+  font-weight: bold;
+  text-align: left;
+  margin-top:0ex;
+  margin-bottom:0ex;
+}
+
+.left {
+  margin-left:0ex;
+}
+
+.large {
+  font-size:120%;
+}
+
+.script {
+  font-family: Courier New;
+}
+
+.small {
+  font-size:80%;
+}
+
+.source {
+  padding:2ex;
+  background-color: #DBD7BE;
+}
+
+.results {
+  margin-left: 8ex;
+  padding:2ex;
+}
+
+p.source {
+  width:100%;
+  background-color: #FF0000;
+}
+
+textarea.source {
+  margin-left: 8ex;
+}

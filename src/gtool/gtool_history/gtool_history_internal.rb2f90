@@ -1,0 +1,895 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+#
+# "gtool_history_internal.f90" Generator with Ruby.
+#
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!
+!= デフォルトの GT_HISTORY 変数および GT_HISTORY 操作用内部手続き
+!= A default GT_HISTORY variable and internal procedures for handling of GT_HISTORY
+!
+! Authors::   Yasuhiro MORIKAWA, Eizi TOYODA
+! Version::   $Id: gtool_history_internal.rb2f90,v 1.3 2009-10-12 04:03:45 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2000-2005. All rights reserved.
+! License::   See COPYRIGHT[link:../../../COPYRIGHT]
+!
+module gtool_history_internal
+  !
+  ! このモジュールは, 各サブルーチンにおいて, history 引数が
+  ! 未指定の場合に使用されるデフォルトの GT_HISTORY 変数を
+  ! 保管するとともに, GT_HISTORY 変数内の情報を編集するための
+  ! gtool_history モジュール内部で使用する手続きについても提供します.
+  ! 内部向けなので, gtool5 ライブラリの外部から呼び出さないでください.
+  !
+  ! A default "GT_HISTORY" variable
+  ! that is used when "history" argument
+  ! of each subroutine is not specified is stored in this module.
+  ! In addition, procedures that handle information in GT_HISTORY variables
+  ! are provided.
+  ! This variable is prepared for internal use,
+  ! so do not refer this variable from outside of gtool5
+  !
+  use dc_types, only: STRING
+  use gtool_history_types, only: GT_HISTORY
+  use gtdata_types, only: GT_VARIABLE
+  implicit none
+  private
+  type(GT_HISTORY), save, target, public:: default
+                              ! 各サブルーチンにおいて, history 引数が
+                              ! 未指定の場合に使用される
+                              ! デフォルトの GT_HISTORY 変数.
+                              !
+                              ! A default "GT_HISTORY" variable
+                              ! that is used when "history" argument
+                              ! of each subroutine is not specified.
+
+  character(STRING), parameter, public:: &
+    & gtool4_netCDF_Conventions = &
+    &     "http://www.gfd-dennou.org/library/gtool4/conventions/"
+    ! gtool4 netCDF 規約の URL
+
+  character(STRING), parameter, public:: &
+    & gtool4_netCDF_version = "4.3"
+    ! gtool4 netCDF 規約のバージョン
+
+  public:: append_attrs, copy_attrs
+  public:: set_fake_dim_value
+  public:: lookup_variable_ord, lookup_variable
+  public:: lookup_dimension, lookup_var_or_dim
+#ifdef LIB_MPI
+  public:: gtmpi_axis_register, gtmpi_vars_mkindex
+#endif
+
+  interface append_attrs
+    module procedure append_attrs
+  end interface
+
+  interface copy_attrs
+    module procedure copy_attrs
+  end interface
+
+  interface set_fake_dim_value
+    module procedure set_fake_dim_value
+  end interface
+
+  interface lookup_variable_ord
+    module procedure lookup_variable_ord
+  end interface
+
+  interface lookup_variable
+    module procedure lookup_variable
+  end interface
+
+  interface lookup_dimension
+    module procedure lookup_dimension
+  end interface
+
+  interface lookup_var_or_dim
+    module procedure lookup_var_or_dim
+  end interface
+
+#ifdef LIB_MPI
+  interface gtmpi_axis_register
+    module procedure gtmpi_axis_register
+  end interface
+
+  interface gtmpi_vars_mkindex
+    module procedure gtmpi_vars_mkindex
+  end interface
+#endif
+
+contains
+
+  subroutine append_attrs(varname, attrs, history)
+    !
+    ! GT_HISTORY_ATTR 変数を history の varname 変数に
+    ! 付加するためのサブルーチン. 公開用ではなく,
+    ! HistoryCreate や HistoryAddVariable に GT_HISTORY_AXIS
+    ! や GT_HISTORY_VARINFO が与えられた時に内部的に利用される.
+    !
+    use gtool_history_generic, only: HistoryAddAttr
+    use gtdata_generic, only: Put_Attr
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_string     , only: StrHead, LChar, toChar
+    use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO, GT_HISTORY_ATTR
+    implicit none
+    character(*),     intent(in):: varname
+    type(GT_HISTORY_ATTR),  intent(in):: attrs(:)
+    type(GT_HISTORY), intent(inout), target, optional:: history
+
+    type(GT_HISTORY), pointer:: hst =>null()
+    integer                      :: i
+    character(*), parameter:: subname = "append_attrs"
+  continue
+    call BeginSub(subname, 'varname=<%c>, size(attrs(:))=<%d>', &
+      &        c1=trim(varname), i=(/size(attrs(:))/))
+
+    if (present(history)) then
+      hst => history
+    else
+      hst => default
+    endif
+
+    ! attrs(:) のサイズ分だけループ
+    do i = 1, size( attrs(:) )
+      ! attrs(i)%attrtype の種別で与える変数を変える
+      if ( StrHead( 'char', trim(LChar(attrs(i)%attrtype))) ) then
+        call HistoryAddAttr( &
+          & varname, attrs(i)%attrname, &
+          & trim(attrs(i)%Charvalue), hst )
+
+      elseif ( StrHead( 'int', trim(LChar(attrs(i)%attrtype))) ) then
+        if ( attrs(i)%array ) then
+          call DbgMessage('Intarray(:) is selected.')
+          call HistoryAddAttr( &
+            & varname, attrs(i)%attrname , &
+            & attrs(i)%Intarray, hst       )
+        else
+          call DbgMessage('Intvalue is selected')
+          call HistoryAddAttr( &
+            & varname, attrs(i)%attrname , &
+            & attrs(i)%Intvalue, hst      )
+        endif
+
+      elseif ( StrHead( 'real', trim(LChar(attrs(i)%attrtype))) ) then
+        if ( attrs(i)%array ) then
+          call DbgMessage('Realarray(:) is selected.')
+          call HistoryAddAttr( &
+            & varname, attrs(i)%attrname, attrs(i)%Realarray, hst)
+        else
+          call DbgMessage('Realvalue is selected')
+          call HistoryAddAttr( &
+            & varname, attrs(i)%attrname, attrs(i)%Realvalue, hst)
+        endif
+
+      elseif ( StrHead( 'double', trim(LChar(attrs(i)%attrtype))) ) then
+        if ( attrs(i)%array ) then
+          call DbgMessage('Doublearray(:) is selected.')
+          call HistoryAddAttr( &
+            & varname, attrs(i)%attrname, attrs(i)%Doublearray, hst)
+        else
+          call DbgMessage('Doublevalue is selected')
+          call HistoryAddAttr( &
+            & varname, attrs(i)%attrname, attrs(i)%Doublevalue, hst)
+        endif
+
+      elseif ( StrHead( 'logical', trim(LChar(attrs(i)%attrtype))) ) then
+        call HistoryAddAttr( &
+          & varname, attrs(i)%attrname, attrs(i)%Logicalvalue, hst)
+
+      else
+        call DbgMessage('attrtype=<%c>=<%c>is Invalid.'   , &
+          &      c1=trim(attrs(i)%attrtype)         , &
+          &      c2=trim(LChar(attrs(i)%attrtype))      )
+      endif
+    enddo
+    call EndSub(subname)
+  end subroutine append_attrs
+
+
+  subroutine copy_attrs(from, to, err)
+    !
+    ! GT_HISTORY_ATTR 変数をコピーするためのサブルーチン
+    ! このモジュール内部で利用されることを想定している.
+    ! from と to の配列サイズは同じであることが想定されている.
+    ! err を与えると, コピーの際何らかの不具合が生じると
+    ! 終了せずに err が真になって返る.
+    !
+    use dc_string,only: LChar, StrHead
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_error, only: StoreError, &
+      &  GT_EARGSIZEMISMATCH, GT_EBADATTRNAME, DC_NOERR
+    use dc_types, only: STRING, TOKEN
+    use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO, GT_HISTORY_ATTR
+    implicit none
+    type(GT_HISTORY_ATTR), intent(in)  :: from(:)
+    type(GT_HISTORY_ATTR), intent(out) :: to(:)
+    logical,               intent(out), optional :: err
+    integer     :: i, stat
+    character(STRING) :: cause_c
+    character(STRING), parameter:: subname = "copy_attrs"
+  continue
+
+    call BeginSub(subname)
+    stat = DC_NOERR
+    cause_c = ''
+
+    call DbgMessage('size(from)=<%d>, size(to)=<%d>, So copy <%d> times.', &
+      &       i=(/ size(from), size(to), min(size(from),size(to)) /) )
+
+    if ( size(to) < size(from) ) then
+      stat = GT_EARGSIZEMISMATCH
+      cause_c = 'from is larger than to'
+      goto 999
+    end if
+
+
+    ! from と to の小さい方に合わせてループ
+    do i = 1, min( size(from), size(to) )
+      ! attrname と attrtype と array はまずコピー
+      to(i)%attrname       = from(i)%attrname
+      to(i)%attrtype       = from(i)%attrtype
+      to(i)%array          = from(i)%array
+
+      ! from(i)%attrtype の種別でコピーする変数を変える.
+      if ( StrHead( 'char', trim(LChar(from(i)%attrtype))) ) then
+        to(i)%Charvalue      = from(i)%Charvalue
+
+                    #{foreach("\\$type\\$", "Int", "Real", "Double", %Q{
+      elseif ( StrHead( &
+        &   LChar('$type$'), trim(LChar(from(i)%attrtype)))) then
+        if ( from(i)%array ) then
+          allocate(  to(i)%$type$array( size(from(i)%$type$array) )  )
+          to(i)%$type$array = from(i)%$type$array
+        else
+          to(i)%$type$value = from(i)%$type$value
+        endif
+                    })}
+      elseif ( StrHead( 'logical', trim(LChar(from(i)%attrtype))) ) then
+        to(i)%Logicalvalue = from(i)%Logicalvalue
+
+      else
+        stat = GT_EBADATTRNAME
+        cause_c = from(i)%attrtype
+        goto 999
+      endif
+    enddo
+
+999 continue
+    call StoreError(stat, subname, err, cause_c=cause_c)
+    call EndSub(subname)
+  end subroutine copy_attrs
+
+
+  subroutine set_fake_dim_value(history, dimord)
+    !
+    ! 次元 history % dimvars(dimord) に値が設定されていない場合、
+    ! 「とりあえず」値を設定する。ただし、無制限次元 (時間次元)
+    ! に関しては history % origin, history % interval, history % count
+    ! から「まっとうな」値が設定される。
+    !
+    use gtdata_generic, only: Inquire, Slice, Put
+    use dc_error, only: DumpError
+!    use dc_calendar, only: DCCalConvertByUnit
+!    use dc_date, only: EvalByUnit
+    type(GT_HISTORY), intent(inout):: history
+    integer, intent(in):: dimord
+    integer:: length, i
+    real, allocatable:: value(:)
+    logical:: err
+  continue
+    if (dimord == history % unlimited_index) then
+      if (.not. associated(history % count)) return
+      length = maxval(history % count(:))
+    else
+      call Inquire(history % dimvars(dimord), size=length)
+    endif
+    if (length == 0) return
+    allocate(value(length))
+    if (dimord == history % unlimited_index) then
+      value(:) = (/(real(i), i = 1, length)/)
+      value(:) =   &
+        &   history % origin &
+        & + (value(:) - 1.0) * history % interval
+
+!!$      value(:) =   &
+!!$        &   EvalByUnit( history % origin, '', history % unlimited_units_symbol ) &
+!!$        & + (value(:) - 1.0) &
+!!$        &   * EvalByUnit( history % interval, '', history % unlimited_units_symbol )
+      call Slice(history % dimvars(dimord), 1, start=1, count=length)
+    else
+      value(:) = (/(real(i), i = 1, length)/)
+    endif
+
+    call Put(history % dimvars(dimord), value, size(value), err)
+    if (err) call DumpError
+    deallocate(value)
+  end subroutine set_fake_dim_value
+
+  integer function lookup_variable_ord(history, varname) result(result)
+    !
+    ! history 内の varname 変数の変数番号を返す.
+    ! 現在, 明示的に history 変数を与えない場合の変数番号の
+    ! 検索は出来ない.
+    !
+    use dc_types, only: STRING
+    use gtdata_generic, only: inquire
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    implicit none
+    type(GT_HISTORY), intent(in):: history
+    character(len = *), intent(in):: varname
+    character(len = string):: name
+    character(len = *), parameter:: subname = 'lookup_variable_ord'
+  continue
+    call BeginSub(subname, 'var=%c', c1 = trim(varname))
+    if (associated(history % vars)) then
+      do, result = 1, size(history % vars)
+        call Inquire(history % vars(result), name=name)
+        if (name == varname) goto 999
+        call DbgMessage('no match <%c> <%c>', c1=trim(name), c2=trim(varname))
+      enddo
+    endif
+    result = 0
+999 continue
+    call EndSub(subname, "result=%d", i=(/result/))
+  end function
+
+  type(GT_VARIABLE) function lookup_variable(history, varname, ord) result(result)
+    !
+    !  history 内での変数 varname の ID を取得
+    !    ID を取得できた場合, 返り値 result と ord にそれぞれ
+    !    その ID が返される。
+    !    ID を取得できない場合、ord が渡されていなければその場で終了
+    !    ord が渡されている場合は ord に 0 が返される。
+    !
+    use dc_types, only: STRING
+    use dc_error, only: StoreError, NF90_ENOTVAR, DC_NOERR
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    implicit none
+    type(GT_HISTORY), intent(in):: history
+    character(len = *), intent(in):: varname
+    character(len = STRING) :: cause_c
+    integer, intent(out), optional:: ord
+    integer:: ordwork
+    integer:: i, stat
+    character(len = *), parameter:: subname = 'lookup_variable'
+  continue
+    call BeginSub(subname, '%c', c1=trim(varname))
+    stat = DC_NOERR
+    cause_c = ''
+    if (present(ord)) ord = 0
+    ordwork = 0
+    i = lookup_variable_ord(history, varname)
+    if (i > 0) then
+      result = history % vars(i)
+      if (present(ord)) ord = i
+      goto 999
+    endif
+    if (present(ord)) then
+      ord = 0
+    else
+      stat = NF90_ENOTVAR
+      cause_c = varname
+      i = 0
+    endif
+999 continue
+    call StoreError(stat, subname, cause_c=cause_c)
+    if (present(ord)) ordwork = ord
+    call EndSub(subname, "ord=%d (0: not found)", i=(/ordwork/))
+  end function
+
+  type(GT_VARIABLE) function lookup_dimension(history, dimname, ord) result(result)
+    !
+    ! history 内の dimname という変数名を持つ次元の GT_VARIABLE
+    ! 変数を返す. dimname 末尾の空白は無視される.
+    !
+    use gtdata_generic, only: Inquire
+    use dc_types, only: STRING
+    use dc_error, only: StoreError, GT_EBADDIMNAME, DC_NOERR
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    implicit none
+    type(GT_HISTORY), intent(in):: history
+    character(len = *), intent(in):: dimname
+    integer, intent(out), optional:: ord
+    integer:: ordwork
+    character(len = STRING):: name, cause_c
+    integer:: i, stat
+    character(len = *), parameter:: subname = 'lookup_dimension'
+  continue
+    call BeginSub(subname, 'dimname=%c', c1=trim(dimname))
+    stat = DC_NOERR
+    if (present(ord)) ord = 0
+    ordwork = 0
+    if (associated(history % dimvars)) then
+      do, i = 1, size(history % dimvars)
+        call Inquire(history % dimvars(i), name=name)
+        if (name == trim(dimname)) then
+          result = history % dimvars(i)
+          if (present(ord)) ord = i
+          stat = DC_NOERR
+          cause_c = ""
+          goto 999
+        endif
+      enddo
+    endif
+    if (present(ord)) then
+      ord = 0
+    else
+      stat = GT_EBADDIMNAME
+      cause_c = dimname
+    endif
+999 continue
+    call StoreError(stat, subname, cause_c=cause_c)
+    if (present(ord)) ordwork = ord
+    call EndSub(subname, 'ord=%d (0:not found)', i=(/ordwork/))
+  end function
+
+  subroutine lookup_var_or_dim(history, name, var, err)
+    !
+    ! history 内から, name という名前の次元または変数を探査し,
+    ! var に GT_VARIABLE 変数を返す. 見つかって正常に
+    ! var が返る場合は stat には DC_NOERR が返り,
+    ! history 内から name が発見されない場合には, stat に
+    ! NF90_ENOTVAR が返る.
+    !
+    use dc_error, only: StoreError, DC_NOERR, NF90_ENOTVAR
+    use dc_types, only: STRING
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    implicit none
+    type(GT_HISTORY), intent(in):: history
+    character(len = *), intent(in):: name
+    type(GT_VARIABLE), intent(out):: var
+    logical, intent(out):: err
+    integer:: stat, ord
+    character(STRING) :: cause_c
+    character(len = *), parameter:: subname = 'lookup_var_or_dim'
+
+  continue
+    call BeginSub(subname, 'name=<%c>', c1=trim(name))
+    cause_c = ""
+    stat = DC_NOERR
+    var = lookup_variable(history, name, ord)
+    if (ord /= 0) then
+      stat = DC_NOERR
+      goto 999
+    endif
+    var = lookup_dimension(history, name, ord)
+    if (ord /= 0) then
+      stat = DC_NOERR
+      goto 999
+    endif
+    stat = NF90_ENOTVAR
+    cause_c = "Any vars and dims are not found"
+999 continue
+    call StoreError(stat, subname, err, cause_c)
+    call EndSub(subname, 'ord=%d (0:not found)', i=(/ord/))
+  end subroutine lookup_var_or_dim
+
+
+#ifdef LIB_MPI
+
+  subroutine gtmpi_axis_register(hst, err)
+    !
+    ! hst % mpi_gthr_info に情報の登録を行う.
+    !
+    use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO, GT_HISTORY_ATTR
+    use gtdata_generic, only: Inquire
+    use gtdata_types, only: GT_VARIABLE
+    use dc_error, only: StoreError, DC_NOERR, HST_EMPINOAXISDATA
+    use dc_message, only: MessageNotify
+    use dc_url, only: UrlSplit
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_types, only: STRING, TOKEN, DP
+    use mpi
+    implicit none
+    type(GT_HISTORY), intent(inout):: hst
+    logical, intent(out), optional:: err
+    integer:: i, j, k, ra, numdims
+    integer:: err_mpi, st_mpi(MPI_STATUS_SIZE)
+    integer, allocatable:: index_all_buf(:)
+    character(STRING):: url, dimname
+    real:: accuracy
+    real(DP):: zero_limit
+    logical:: flag_hit
+    real(DP), pointer:: large =>null(), small =>null()
+    integer:: stat
+    character(STRING):: cause_c
+    character(*), parameter:: subname = 'gtmpi_axis_register'
+    character(*), parameter:: subnameup = 'HistoryPut'
+  continue
+    call BeginSub(subname)
+    cause_c = ""
+    stat = DC_NOERR
+
+    numdims = size( hst % dimvars )
+    accuracy = 1.0e-3
+    zero_limit = 1.0e-6_DP
+    allocate( hst % mpi_gthr_info(numdims) )
+
+    ! 未登録の座標データ (時刻以外) がある場合にはエラー
+    ! Error is occurred when non registered data of axes (excluding time)
+    !
+    do i = 1, numdims
+      if ( hst % unlimited_index == i ) cycle
+      if ( hst % time_nv_index == i ) cycle
+      if ( hst % mpi_myrank == 0 ) then
+        call Inquire( hst % dimvars(i), & ! (in)
+          &           url = url )         ! (out)
+        call UrlSplit( url, & ! (in)
+          &  var = dimname )  ! (out)
+        call MPI_Bcast( dimname, STRING, MPI_CHARACTER, 0, MPI_COMM_WORLD, err_mpi )
+      else
+        call MPI_Bcast( dimname, STRING, MPI_CHARACTER, 0, MPI_COMM_WORLD, err_mpi )
+      end if
+
+      if ( hst % mpi_myrank == 0 ) then
+        if ( hst % mpi_dimdata_all(i) % length < 0 ) then
+          call MessageNotify('W', subnameup, &
+            & 'data of axis (%c) in whole area is lack. ' // &
+            & 'Specify the data by "HistoryPutAxisMPI" explicitly.', &
+            & c1 = trim(dimname) )
+          stat = HST_EMPINOAXISDATA
+          cause_c = dimname
+          goto 999
+        end if
+      end if
+
+      if ( hst % mpi_dimdata_each(i) % length < 0 ) then
+        call MessageNotify('W', subnameup, &
+          & 'data of axis (%c) on node (%d) is lack. ' // &
+          & 'Specify the data by "HistoryPut" explicitly.', &
+          & c1 = trim(dimname), i = (/ hst % mpi_myrank /) )
+        stat = HST_EMPINOAXISDATA
+        cause_c = dimname
+        goto 999
+      end if
+    end do
+
+    ! mpi_gthr_info へ情報を登録
+    ! Register information to "mpi_gthr_info"
+    !
+    do i = 1, numdims
+      if ( hst % unlimited_index == i ) cycle
+      if ( hst % time_nv_index == i ) cycle
+      allocate( &
+        & hst % mpi_gthr_info(i) % length( 0: hst % mpi_nprocs - 1 ) )
+      allocate( &
+        & hst % mpi_gthr_info(i) % &
+        &  index_all( 0: hst % mpi_nprocs - 1, &
+        &             hst % mpi_dimdata_all(i) % length ) )
+      hst % mpi_gthr_info(i) % index_all(:,:) = -1
+      hst % mpi_gthr_info(i) % length( hst % mpi_myrank ) = &
+        & hst % mpi_dimdata_each(i) % length
+
+      k = 1
+      do j = 1, hst % mpi_dimdata_all(i) % length
+        flag_hit = .false.
+
+        if ( abs( hst % mpi_dimdata_all(i) % a_Axis(j) ) > &
+          &  abs( hst % mpi_dimdata_each(i) % a_Axis(k) ) ) then
+          large => hst % mpi_dimdata_all(i) % a_Axis(j)
+          small => hst % mpi_dimdata_each(i) % a_Axis(k)
+        else
+          large => hst % mpi_dimdata_each(i) % a_Axis(k)
+          small => hst % mpi_dimdata_all(i) % a_Axis(j)
+        end if
+
+        if (      large > 0.0_DP .and. small < 0.0_DP &
+          &  .or. large < 0.0_DP .and. small > 0.0_DP ) then
+          cycle
+        end if
+
+        if ( abs( large ) < zero_limit .and. abs( small ) < zero_limit ) then
+          flag_hit = .true.
+        end if
+
+        if ( .not. flag_hit .and. &
+          &  abs( ( large / small ) - 1.0_DP ) < accuracy ) then
+          flag_hit = .true.
+        end if
+
+        if ( flag_hit ) then
+          hst % mpi_gthr_info(i) % index_all ( hst % mpi_myrank, k ) = j
+          k = k + 1
+        end if
+
+        if ( k > hst % mpi_gthr_info(i) % length( hst % mpi_myrank ) ) exit
+      end do
+
+    end do
+
+    ! rank == 0 で情報を受け取る.
+    ! Receive information by rank == 0
+    !
+    if ( hst % mpi_myrank == 0 ) then
+      do i = 1, numdims
+        if ( hst % unlimited_index == i ) cycle
+        if ( hst % time_nv_index == i ) cycle
+        allocate( index_all_buf( hst % mpi_dimdata_all(i) % length ) )
+        do ra = 1, hst % mpi_nprocs - 1
+          call MPI_Recv( &
+            & index_all_buf, &
+            & hst % mpi_dimdata_all(i) % length, &
+            & MPI_INTEGER, ra, 0, MPI_COMM_WORLD, st_mpi, err_mpi )
+          hst % mpi_gthr_info(i) % index_all (ra,:) = index_all_buf(:)
+        end do
+        deallocate( index_all_buf )
+        do ra = 1, hst % mpi_nprocs - 1
+          call MPI_Recv( &
+            & hst % mpi_gthr_info(i) % length (ra), &
+            & 1, &
+            & MPI_INTEGER, ra, 0, MPI_COMM_WORLD, st_mpi, err_mpi )
+        end do
+      end do
+    else
+      do i = 1, numdims
+        if ( hst % unlimited_index == i ) cycle
+        if ( hst % time_nv_index == i ) cycle
+        allocate( index_all_buf( hst % mpi_dimdata_all(i) % length ) )
+        index_all_buf(:) = hst % mpi_gthr_info(i) % index_all (hst % mpi_myrank,:)
+        call MPI_Send( &
+          & index_all_buf, &
+          & hst % mpi_dimdata_all(i) % length, &
+          & MPI_INTEGER, 0, 0, MPI_COMM_WORLD, err_mpi )
+        deallocate( index_all_buf )
+        call MPI_Send( &
+          & hst % mpi_gthr_info(i) % length (hst % mpi_myrank), &
+          & 1, &
+          & MPI_INTEGER, 0, 0, MPI_COMM_WORLD, err_mpi )
+      end do
+    end if
+
+    ! 情報に不足が無いかチェック
+    ! Check lack of information
+    !
+    if ( hst % mpi_myrank == 0 ) then
+      do ra = 0, hst % mpi_nprocs - 1
+        do i = 1, numdims
+          if ( hst % unlimited_index == i ) cycle
+          if ( hst % time_nv_index == i ) cycle
+        end do
+      end do
+      do ra = 0, hst % mpi_nprocs - 1
+        do i = 1, numdims
+          if ( hst % unlimited_index == i ) cycle
+          if ( hst % time_nv_index == i ) cycle
+          do j = 1, hst % mpi_gthr_info(i) % length (ra)
+            if ( hst % mpi_gthr_info(i) % index_all (ra,j) < 1 ) then
+              call Inquire( hst % dimvars(i), & ! (in)
+                &           url = url )         ! (out)
+              call UrlSplit( url, & ! (in)
+                &  var = dimname )  ! (out)
+              call MessageNotify('W', subnameup, &
+                & 'data of axis (%c) on node (%d) or ' // &
+                & 'in whole area are lack. ' // &
+                & 'Specify the data by "HistoryPut" or "HistoryPutAxisMPI" explicitly.', &
+                & c1 = trim(dimname), i = (/ ra /) )
+              stat = HST_EMPINOAXISDATA
+              cause_c = dimname
+              goto 999
+            end if
+          end do
+        end do
+      end do
+    end if
+
+999 continue
+    call StoreError(stat, subname, err, cause_c)
+    call EndSub(subname)
+  end subroutine gtmpi_axis_register
+
+
+  subroutine gtmpi_vars_mkindex(hst, v_ord, err)
+    !
+    ! hst % mpi_vars_index に配列添字情報の登録を行う.
+    !
+    use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO, GT_HISTORY_ATTR
+    use gtool_history_generic, only: HistoryVarinfoInquire
+    use gtdata_generic, only: Inquire
+    use gtdata_types, only: GT_VARIABLE
+    use dc_error, only: StoreError, DC_NOERR, HST_EMPINOAXISDATA
+    use dc_message, only: MessageNotify
+    use dc_url, only: UrlSplit
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_types, only: STRING, TOKEN, DP
+    use mpi
+    implicit none
+    type(GT_HISTORY), intent(inout):: hst
+    integer, intent(in):: v_ord ! 変数 ID
+    logical, intent(out), optional:: err
+    character(TOKEN), pointer:: dims(:) =>null(), dims_space(:) =>null()
+    integer, pointer:: dimsizes_each(:,:) =>null(), dimsizes_all(:) =>null()
+    type(GT_VARIABLE):: dimvar
+    integer:: i, j, ra, numdims, time_dimord
+    integer, pointer:: dimord(:) =>null()
+    integer:: each_index
+    integer, pointer:: idx(:) =>null()
+    integer:: moveup
+    integer:: check_dimsizes_all, check_dimsizes_each
+    character(STRING):: check_varname
+    integer:: err_mpi
+    integer:: stat
+    character(STRING):: cause_c
+    character(*), parameter:: subname = 'gtmpi_vars_mkindex'
+    character(*), parameter:: subnameup = 'HistoryPut'
+  continue
+    call BeginSub(subname)
+    cause_c = ""
+    stat = DC_NOERR
+
+    ! rank/=0 は何もせずに終了.
+    ! Finish without actions if rank/=0
+    !
+    ! * 以降の割り付け動作をプロセス 0 でのみ行うと,
+    !   なぜか Cray XT 上で並列計算する際に
+    !   「異常な数値を ALLOCATE しようとしている」
+    !   というエラーが生じるため, (無駄だが) 全プロセスで以降の
+    !   割り付け動作を行う.
+    !
+    !!! if ( hst % mpi_myrank /= 0 ) goto 999
+
+    ! 変数が依存する座標軸情報を取得
+    ! Information of axes depended from the variable
+    !
+    call HistoryVarinfoInquire( &
+      & hst % mpi_varinfo( v_ord ), & ! (in)
+      & dims = dims )                 ! (out)
+
+    ! 時刻次元の排除
+    ! Ignore time dimension
+    !
+    numdims = size( dims )
+    time_dimord = -1
+    allocate( dimord(1) )
+    if ( hst % unlimited_index > 0 ) then
+      do i = 1, numdims
+        if ( hst % mpi_myrank == 0 ) then
+          dimvar = lookup_dimension( hst, dims(i), dimord(1) )
+        end if
+        call MPI_Bcast( dimord(1), 1, MPI_INTEGER, 0, MPI_COMM_WORLD, err_mpi )
+        if ( hst % unlimited_index == dimord(1) ) time_dimord = i
+      end do
+    end if
+    if ( time_dimord > 0 ) then
+      allocate( dims_space(numdims - 1) )
+      j = 1
+      do i = 1, numdims
+        if ( i == time_dimord ) cycle
+        dims_space(j) = dims(i)
+        j = j + 1
+      end do
+      numdims = numdims - 1
+      deallocate( dims )
+    else
+      dims_space => dims
+      nullify( dims )
+    end if
+    deallocate( dimord )
+
+    ! スカラーの場合は例外処理
+    ! Exception handling for scalar value
+    !
+    if ( numdims < 1 ) then
+      allocate( hst % mpi_vars_index(v_ord) % &
+        &         each2all( 0: hst % mpi_nprocs - 1, 1 ) )
+      allocate( hst % mpi_vars_index(v_ord) % &
+        &         allcount( 0: hst % mpi_nprocs - 1 ) )
+
+      hst % mpi_vars_index(v_ord) % each2all(:,:) = 1
+      hst % mpi_vars_index(v_ord) % allcount(:) = 1
+      goto 999
+    end if
+
+    ! 配列の割付
+    ! Allocate array
+    !
+    allocate( dimord( numdims ) )
+    allocate( dimsizes_all( numdims ) )
+    allocate( dimsizes_each( 0:hst % mpi_nprocs - 1, numdims ) )
+
+    ! 個々の次元のサイズの取得
+    ! Get size of each dimension
+    !
+    do i = 1, numdims
+      if ( hst % mpi_myrank == 0 ) then
+        dimvar = lookup_dimension( hst, dims_space(i), dimord(i) )
+      end if
+      call MPI_Bcast( dimord(i), 1, MPI_INTEGER, 0, MPI_COMM_WORLD, err_mpi )
+      dimsizes_all(i)  = hst % mpi_dimdata_all ( dimord(i) ) % length
+      do ra = 0, hst % mpi_nprocs - 1
+        dimsizes_each(ra, i) = hst % mpi_gthr_info( dimord(i) ) % length( ra )
+      end do
+    end do
+
+    allocate( hst % mpi_vars_index(v_ord) % &
+      &         each2all( 0: hst % mpi_nprocs - 1, product(dimsizes_all) ) )
+    allocate( hst % mpi_vars_index(v_ord) % &
+      &         allcount( 0: hst % mpi_nprocs - 1 ) )
+    hst % mpi_vars_index(v_ord) % each2all(:,:) = -1
+
+    do ra = 0, hst % mpi_nprocs - 1
+      hst % mpi_vars_index(v_ord) % allcount(ra) = &
+        & product( dimsizes_each(ra,:) )
+    end do
+
+    hst % mpi_vars_index(v_ord) % allcount_all = product( dimsizes_all(:) )
+
+    ! rank/=0 はこの時点で終了
+    ! Finish at this point if rank/=0
+    !
+    if ( hst % mpi_myrank /= 0 ) goto 999
+
+    allocate( idx(numdims) )
+
+    do ra = 0, hst % mpi_nprocs - 1
+      idx(:) = 1
+      idx(1) = 0
+      do i = 1, product( dimsizes_each(ra, :) )
+        idx(1) = idx(1) + 1
+        moveup = 0
+        do j = 1, numdims
+          if ( moveup > 0 ) then
+            idx(j) = idx(j) + moveup
+            moveup = 0
+          end if
+          if ( idx(j) > dimsizes_each(ra,j) ) then
+            idx(j) = 1
+            moveup = 1
+          end if
+        end do
+
+        each_index = hst % mpi_gthr_info(dimord(1)) % index_all (ra,idx(1))
+
+        do j = 2, numdims
+          each_index = each_index + &
+            & ( hst % mpi_gthr_info(dimord(j)) % index_all (ra,idx(j)) - 1 ) &
+            &   * product( dimsizes_all(1:j-1) )
+        end do
+
+        hst % mpi_vars_index(v_ord) % each2all(ra, i) = each_index
+
+      end do
+    end do
+
+    deallocate( idx )
+
+    ! 不足データが無いかチェック
+    ! Check lack of data
+    !
+    check_dimsizes_all = product( dimsizes_all(:) )
+    check_dimsizes_each = sum( hst % mpi_vars_index(v_ord) % allcount(:) )
+    if ( check_dimsizes_all > check_dimsizes_each ) then
+      call Inquire( hst % vars(v_ord), &   ! (in)
+        &           name = check_varname ) ! (out)
+      call MessageNotify('W', subnameup, &
+        & 'collected data (%c) from each node is lack. ' // &
+        & 'collected data size=<%d>, but needed whole data size=<%d>.', &
+        & c1 = trim(check_varname), &
+        & i = (/ check_dimsizes_each, check_dimsizes_all /) )
+    end if
+
+999 continue
+    call StoreError(stat, subname, err, cause_c)
+    call EndSub(subname)
+  end subroutine gtmpi_vars_mkindex
+
+#endif
+
+end module gtool_history_internal
+
+__EndOfFortran90Code__
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

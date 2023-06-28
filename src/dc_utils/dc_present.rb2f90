@@ -1,0 +1,509 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+#
+# "dc_present.f90" Generator with Ruby.
+#
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!== Judge optional control parameters
+!
+! Authors::   Takeshi HORINOUCHI, Yasuhiro MORIKAWA
+! Version::   $Id: dc_present.rb2f90,v 1.2 2009-03-22 02:17:34 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2000-2005. All rights reserved.
+! License::   See COPYRIGHT[link:../../COPYRIGHT]
+!
+
+module dc_present
+  !
+  !== Judge optional control parameters
+  !
+  ! Fortran90/95 の optional 引数の判定用の関数群を提供しています。
+  !
+  ! These functions judge optional control parameters.
+  !
+  !
+
+  use dc_types, only: DP, TOKEN, STRING
+  use dc_trace, only: BeginSub, EndSub
+  private
+  public :: present_and_true
+  public :: present_and_false
+  public :: present_and_zero
+  public :: present_and_nonzero
+  public :: present_and_eq
+  public :: present_and_ne
+  public :: present_and_not_empty
+  public :: present_select
+
+  interface present_and_eq
+    module procedure present_and_eq_integer
+    module procedure present_and_eq_real
+    module procedure present_and_eq_double
+!!$#ifndef NO_DOUBLE
+!!$     module procedure present_and_eq_double
+!!$#endif
+  end interface
+
+  interface present_and_ne
+    module procedure present_and_ne_integer
+    module procedure present_and_ne_real
+    module procedure present_and_ne_double
+!!$#ifndef NO_DOUBLE
+!!$     module procedure present_and_ne_double
+!!$#endif
+  end interface
+
+  interface present_select
+    module procedure present_select_Char
+    module procedure present_select_Char_auto
+    module procedure present_select_Int
+    module procedure present_select_Int_auto
+    module procedure present_select_Real
+    module procedure present_select_Real_auto
+    module procedure present_select_Double
+    module procedure present_select_Double_auto
+  end interface
+
+contains
+
+  function present_and_true(arg) result(result)
+    !
+    ! arg が省略されておらず、且つ <tt>.true.</tt> の場合、
+    ! <tt>.true.</tt> が返ります。
+    !
+    logical :: result
+    logical,intent(in),optional :: arg
+  continue
+    if(present(arg)) then
+      if(arg) then
+        result=.true.
+      else
+        result=.false.
+      endif
+    else
+      result=.false.
+    endif
+  end function present_and_true
+
+  function present_and_false(arg) result(result)
+    !
+    ! arg が省略されておらず、且つ <tt>.false.</tt> の場合、
+    ! <tt>.true.</tt> が返ります。
+    !
+    logical :: result
+    logical,intent(in),optional :: arg
+  continue
+    if(present(arg)) then
+      if(arg) then
+        result=.false.
+      else
+        result=.true.
+      endif
+    else
+      result=.false.
+    endif
+  end function present_and_false
+
+  function present_and_zero(arg) result(result)
+    !
+    ! arg が省略されておらず、且つ 0 の場合、
+    ! <tt>.true.</tt> が返ります。
+    !
+    logical :: result
+    integer,intent(in),optional :: arg
+  continue
+    if(present(arg)) then
+      if(arg==0) then
+        result=.true.
+      else
+        result=.false.
+      endif
+    else
+      result=.false.
+    endif
+  end function present_and_zero
+
+  function present_and_nonzero(arg) result(result)
+    !
+    ! arg が省略されておらず、且つ 0 ではない場合、
+    ! <tt>.true.</tt> が返ります。
+    !
+    logical :: result
+    integer,intent(in),optional :: arg
+  continue
+    if(present(arg)) then
+      if(arg==0) then
+        result=.false.
+      else
+        result=.true.
+      endif
+    else
+      result=.false.
+    endif
+  end function present_and_nonzero
+
+  function present_and_eq_integer(arg,val) result(result)
+    !
+    ! arg が省略されておらず、且つ val と等しい場合、
+    ! <tt>.true.</tt> が返ります。
+    !
+    logical :: result
+    integer,intent(in),optional :: arg
+    integer,intent(in) :: val
+  continue
+    if(present(arg)) then
+      if(arg==val) then
+        result=.true.
+      else
+        result=.false.
+      endif
+    else
+      result=.false.
+    endif
+  end function present_and_eq_integer
+
+  function present_and_eq_real(arg,val) result(result)
+    !
+    ! arg が省略されておらず、且つ val と等しい場合、
+    ! <tt>.true.</tt> が返ります。
+    !
+    logical :: result
+    real,intent(in),optional :: arg
+    real,intent(in) :: val
+  continue
+    if(present(arg)) then
+      if(arg==val) then
+        result=.true.
+      else
+        result=.false.
+      endif
+    else
+      result=.false.
+    endif
+  end function present_and_eq_real
+
+  function present_and_eq_double(arg,val) result(result)
+    !
+    ! arg が省略されておらず、且つ val と等しい場合、
+    ! <tt>.true.</tt> が返ります。
+    !
+    logical :: result
+    real(DP),intent(in),optional :: arg
+    real(DP),intent(in) :: val
+  continue
+    if(present(arg)) then
+      if(arg==val) then
+        result=.true.
+      else
+        result=.false.
+      endif
+    else
+      result=.false.
+    endif
+  end function present_and_eq_double
+
+  function present_and_ne_integer(arg,val) result(result)
+    !
+    ! arg が省略されておらず、且つ val と等しくない場合、
+    ! <tt>.true.</tt> が返ります。
+    !
+    logical :: result
+    integer,intent(in),optional :: arg
+    integer,intent(in) :: val
+  continue
+    if(present(arg)) then
+      if(arg/=val) then
+        result=.true.
+      else
+        result=.false.
+      endif
+    else
+      result=.false.
+    endif
+  end function present_and_ne_integer
+
+  function present_and_ne_real(arg,val) result(result)
+    !
+    ! arg が省略されておらず、且つ val と等しくない場合、
+    ! <tt>.true.</tt> が返ります。
+    !
+    logical :: result
+    real,intent(in),optional :: arg
+    real,intent(in) :: val
+  continue
+    if(present(arg)) then
+      if(arg/=val) then
+        result=.true.
+      else
+        result=.false.
+      endif
+    else
+      result=.false.
+    endif
+  end function present_and_ne_real
+
+  function present_and_ne_double(arg,val) result(result)
+    !
+    ! arg が省略されておらず、且つ val と等しくない場合、
+    ! <tt>.true.</tt> が返ります。
+    !
+    logical :: result
+    real(DP),intent(in),optional :: arg
+    real(DP),intent(in) :: val
+  continue
+    if(present(arg)) then
+      if(arg/=val) then
+        result=.true.
+      else
+        result=.false.
+      endif
+    else
+      result=.false.
+    endif
+  end function present_and_ne_double
+
+  function present_and_not_empty(arg) result(result)
+    !
+    ! arg が省略されておらず、且つ空文字ではない場合、
+    ! <tt>.true.</tt> が返ります。
+    !
+    logical :: result
+    character(len=*),intent(in),optional :: arg
+  continue
+    if(present(arg)) then
+      if(arg=="") then
+        result=.false.
+      else
+        result=.true.
+      endif
+    else
+      result=.false.
+    endif
+  end function present_and_not_empty
+
+__EndOfFortran90Code__
+
+types = [ "Char", "Int", "Real", "Double"]
+types.each{ |i|
+print <<"__EndOfFortran90Code__"
+
+  function present_select_#{i}(  &
+    &  invalid, default,      &
+#{forloop("\\$num\\$", 0, 8, %Q{
+    &  #{$type_fmt[i]}$num$, &
+})}
+    &  #{$type_fmt[i]}9       &
+    &                            ) result(result)
+    !
+    ! 省略可能な引数 #{$type_fmt[i]}0 〜 #{$type_fmt[i]}9 のうち、
+    ! 省略されておらず、且つ invalid と等しくないものを 1 つ返します。
+    ! 優先順位が最も高いものは #{$type_fmt[i]}0 で、
+    ! 最も低いのは #{$type_fmt[i]}9 です。
+    ! #{$type_fmt[i]}0 〜 #{$type_fmt[i]}9 の全てが省略されているか
+    ! もしくは invalid と同様な場合は default が返ります。
+    !
+    implicit none
+    #{$type_intent_in[i]}     ,intent(in)          :: invalid
+    #{$type_intent_in[i]}     ,intent(in)          :: default
+#{forloop("\\$num\\$", 0, 9, %Q{
+    #{$type_intent_in[i]}     ,intent(in),optional :: #{$type_fmt[i]}$num$
+})}
+    #{$type_intent_out[i]}                         :: result
+
+    !=== Variables for internal work
+    logical                 :: specified
+    character(*),  parameter:: subname = 'present_select_#{i}'
+  continue
+
+#{ifelse("#{i}", "Char", %Q{
+!!$    call BeginSub(subname, 'invalid=%c default=%c',  &
+!!$      &        c1=trim(invalid), c2=trim(default)   )
+}, %Q{
+!!$    call BeginSub(subname, &
+!!$      &        'invalid=%#{$type_fmt[i]} default=%#{$type_fmt[i]}',  &
+!!$      &        #{$type_fmtarg[i]}=(/invalid, default/))
+})}
+    specified = .false.
+
+#{ifelse("#{i}", "Char", %Q{
+    if ( present(c0) ) then
+      if ( len(trim(c0)) > len(trim(invalid)) ) then
+        result = c0
+        specified = .true.
+      else
+        if ( trim(c0) /= invalid(:len(trim(c0))) ) then
+          result = c0
+          specified = .true.
+        endif
+      end if
+    end if
+}, %Q{
+    if ( present(#{$type_fmt[i]}0) ) then
+      if ( #{$type_fmt[i]}0 /= invalid ) then
+        result = #{$type_fmt[i]}0
+        specified = .true.
+      endif
+    end if
+})}
+
+#{forloop("\\$num\\$", 1, 9, %Q{
+#{ifelse("#{i}", "Char", %Q{
+    if ( present(c$num$) .and. .not. specified) then
+      if ( len(trim(c$num$)) > len(trim(invalid)) ) then
+        result = c$num$
+        specified = .true.
+      else
+        if ( trim(c$num$) /= invalid(:len(trim(c$num$))) ) then
+          result = c$num$
+          specified = .true.
+        endif
+      end if
+    end if
+}, %Q{
+    if ( present(#{$type_fmt[i]}$num$) .and. .not. specified ) then
+      if ( #{$type_fmt[i]}$num$ /= invalid ) then
+        result = #{$type_fmt[i]}$num$
+        specified = .true.
+      endif
+    end if
+})}})}
+
+    if (.not. specified) then
+      result = default
+    end if
+
+#{ifelse("#{i}", "Char", %Q{
+!!$    call EndSub(subname, "result=%c", c1=trim(result))
+}, %Q{
+!!$    call EndSub(subname, "result=%#{$type_fmt[i]}", &
+!!$      &      #{$type_fmtarg[i]}=(/result/))
+})}
+
+  end function present_select_#{i}
+
+__EndOfFortran90Code__
+}
+
+types = [ "Char", "Int", "Real", "Double"]
+types.each{ |i|
+print <<"__EndOfFortran90Code__"
+
+  function present_select_#{i}_auto(  &
+    &  invalid, default,      &
+#{forloop("\\$num\\$", 0, 8, %Q{
+    &  #{$type_fmt[i]}$num$, &
+})}
+    &  #{$type_fmt[i]}9                     &
+    &                            ) result(result)
+    !
+    ! invalid に <tt>.false.</tt> を与えた場合、省略可能な引数
+    ! #{$type_fmt[i]}0 〜 #{$type_fmt[i]}9 のうち、
+    ! 省略されておらず且つ優先順位が最も高いものを
+    ! 1 つ返します。優先順位が最も高いのは #{$type_fmt[i]}0 で、
+    ! 最も低いのは #{$type_fmt[i]}9 です。
+    !
+    ! invarlid が .true. の場合は、
+#{ifelse("#{i}", "Char", %Q{
+    ! 空文字 (空白のみの場合も空文字と扱う) は省略されている
+    ! のと同様に扱われ、優先順位に関わらず無視されます。
+    ! 与えられた引数の全てが空文字の場合は default が返ります。
+}, %Q{
+    ! 0 は省略されている
+    ! のと同様に扱われ、優先順位に関わらず無視されます。
+    ! 与えられた引数の全てが 0 の場合は default が返ります。
+})}
+    !
+    implicit none
+    logical          ,intent(in)          :: invalid
+    #{$type_intent_in[i]}     ,intent(in)          :: default
+#{forloop("\\$num\\$", 0, 9, %Q{
+    #{$type_intent_in[i]}     ,intent(in),optional :: #{$type_fmt[i]}$num$
+})}
+    #{$type_intent_out[i]}                         :: result
+
+    !=== Variables for internal work
+    logical                 :: specified
+    character(*),  parameter:: subname = "present_select_#{i}_auto"
+  continue
+
+#{ifelse("#{i}", "Char", %Q{
+!!$    call BeginSub(subname, 'invalid=%y default=%c',  &
+!!$      &        l=(/invalid/), c1=trim(default)   )
+}, %Q{
+!!$    call BeginSub(subname, &
+!!$      &        'invalid=%y default=%#{$type_fmt[i]}',  &
+!!$      &        l=(/invalid/), #{$type_fmtarg[i]}=(/default/))
+})}
+    specified = .false.
+
+#{ifelse("#{i}", "Char", %Q{
+    if ( present(c0) ) then
+       if ( trim(c0) /= '' ) then
+          result = c0
+          specified = .true.
+       endif
+    end if
+}, %Q{
+    if ( present(#{$type_fmt[i]}0) ) then
+       if ( .not. invalid ) then
+          result = #{$type_fmt[i]}0
+          specified = .true.
+       elseif ( #{$type_fmt[i]}0 /= 0#{$type_numsuf[i]} ) then
+          result = #{$type_fmt[i]}0
+          specified = .true.
+       endif
+    end if
+})}
+
+#{forloop("\\$num\\$", 1, 9, %Q{
+#{ifelse("#{i}", "Char", %Q{
+    if ( present(c$num$) .and. .not. specified ) then
+       if ( trim(c$num$) /= '' ) then
+          result = c$num$
+          specified = .true.
+       endif
+    end if
+}, %Q{
+    if ( present(#{$type_fmt[i]}$num$) .and. .not. specified ) then
+       if ( .not. invalid ) then
+          result = #{$type_fmt[i]}$num$
+          specified = .true.
+       elseif ( #{$type_fmt[i]}$num$ /= 0#{$type_numsuf[i]} ) then
+          result = #{$type_fmt[i]}$num$
+          specified = .true.
+       endif
+    end if
+})}})}
+
+    if (.not. specified) then
+       result = default
+    end if
+
+#{ifelse("#{i}", "Char", %Q{
+!!$    call EndSub(subname, "result=%c", c1=trim(result))
+}, %Q{
+!!$    call EndSub(subname, "result=%#{$type_fmt[i]}", &
+!!$      &      #{$type_fmtarg[i]}=(/result/))
+})}
+
+  end function present_select_#{i}_auto
+
+__EndOfFortran90Code__
+}
+
+print <<"__EndOfFortran90Code__"
+end module dc_present
+__EndOfFortran90Code__
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

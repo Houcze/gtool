@@ -1,0 +1,483 @@
+#!/usr/bin/env ruby
+# -*- f90 -*- 
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+require("optparse")
+#
+# "historyautoput.f90" Generator with Ruby.
+#
+opt = OptionParser.new
+opt.on('--histput_dim=VAL') {|v| $histput_dim = v.to_i}
+opt.parse!(ARGV)
+$histput_dim = 7 unless $histput_dim
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= データ出力
+!= Output data
+!
+! Authors::   Yasuhiro MORIKAWA
+! Version::   $Id: historyautoput.rb2f90,v 1.6 2010-07-04 22:01:50 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2008-2009. All rights reserved. 
+! License::   See COPYRIGHT[link:../../../COPYRIGHT]
+!
+__EndOfFortran90Code__
+
+types = ["Double", "Real", "Int"]
+def ValueOrArray(num)
+  return "value" if num == 0
+  return "array"
+end
+def ArgsToPut(num)
+  return "(/value/)" if num == 0
+  return "array"
+end
+types.each{ |type|
+for num in 0..$histput_dim
+print <<"__EndOfFortran90Code__"
+
+  subroutine HistoryAutoPut#{type}#{num}( &
+    & time, varname, #{ValueOrArray(num)}, &  ! (in)
+    & err &                                   ! (out) optional
+    & )
+    !
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+    !
+    ! データの出力を行います.
+    ! このサブルーチンを用いる前に, "HistoryAutoCreate"
+    ! による初期設定が必要です.
+    !
+    ! *varname* は HistoryAutoAddVariable で指定されている必要があります. 
+    !
+    ! *HistoryAutoPut* は複数のサブルーチンの総称名です. *array* には
+    ! 0 〜 #{$histput_dim} 次元のデータを与えることが可能です. 
+    ! (以下の同名のサブルーチンを参照ください).
+    ! また, 整数, 単精度実数, 倍精度実数を与えることが可能です. 
+    ! ただし, 0 次元のデータを与える際の引数キーワードは
+    ! *value* を用いてください.
+    !
+    ! Output data. 
+    ! Initialization by "HistoryAutoCreate" is needed 
+    ! before use of this subroutine. 
+    ! 
+    ! "varname" must be specified by "HistoryAutoAddVariable". 
+    !
+    ! "HistoryAutoPut" is a generic name of multiple subroutines. 
+    ! Then 0 -- #{$histput_dim} dimensional data can be given to "array". 
+    ! (See bellow subroutines with the same name). 
+    ! And, integer, sinble or double precision can be given. 
+    ! However, if 0 dimensional data is given, use "value" as a 
+    ! keyword argument. 
+    !
+    !
+    ! * 時間平均について
+    !
+    !   時間平均については HistoryAutoAddVariable を参照ください。
+    !
+    ! * About time average
+    !
+    !   See "HistoryAutoAddVariable" for details of time average
+    ! 
+    !
+                    })}})}
+    !
+
+    use gtool_historyauto_internal, only: initialized, numdims, &
+      & numvars, gthstnml, zero_time, &
+      & create_timing_vars, close_timing_vars, &
+      & histaddvar_vars, interval_time_vars, interval_unitsym_vars, &
+      & newfile_createtime_vars, &
+      & output_timing_avr_vars, output_timing_vars, prev_outtime_vars, &
+      & renew_timing_vars, varname_vars, gthst_history_vars, slice_vars, &
+      & space_avr_vars, weight_vars, cal_save, flag_output_prev_vars, &
+      & origin_time_vars
+    use gtool_historyauto_internal, only: HstVarsOutputCheck, HstFileCreate, &
+      & AverageReduce
+    use gtool_historyauto_internal, only: SLICE_INFO
+    use gtool_history_nmlinfo_generic, only: HstNmlInfoEndDefine, &
+      & HstNmlInfoDefineMode
+    use gtool_history, only: GT_HISTORY, HistoryPut, HistoryInitialized, &
+      & HistoryAddVariable, HistoryInquire, HistoryVarinfoInquire, &
+      & HistoryClose, HistorySetTime
+    use dc_string, only: toChar
+    use dc_message, only: MessageNotify
+    use dc_trace, only: BeginSub, EndSub
+    use dc_error, only: StoreError, DC_NOERR, GT_EARGSIZEMISMATCH, &
+      & HST_EBADVARNAME, DC_ENOTINIT, DC_ENEGATIVE
+    use dc_calendar, only: UNIT_SYMBOL_SEC, DCCalConvertByUnit
+    use dc_date_generic, only: operator(-), operator(+), &
+      & operator(>), operator(<), mod, operator(==), toChar, EvalSec, &
+      & DCDiffTimePutLine
+    use dc_date_types, only: DC_DIFFTIME, DC_DATETIME
+    use dc_types, only: DP, STRING, TOKEN
+    implicit none
+    real(DP), intent(in):: time
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              ! データの時刻. 
+                              ! Time of data
+                    })}})}
+    character(*), intent(in):: varname
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              ! 変数の名前. 
+                              !
+                              ! ただし, ここで指定するものは, 
+                              ! HistoryAutoAddVariable の
+                              ! *varname* で既に指定されてい
+                              ! なければなりません. 
+                              !
+                              ! Name of a variable. 
+                              !
+                              ! This must be specified  
+                              ! *varname* in "HistoryAutoAddVariable". 
+                    })}})}
+    #{$type_intent_in[type]}, intent(in), target:: #{ValueOrArray(num)}#{array_colon("#{num}")}
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              ! 出力データ. 
+                              !
+                              ! データ型は整数, 単精度実数型, 
+                              ! 倍精度実数型のどれでもかまいません. 
+                              ! ただし, ファイルへ出力される際には, 
+                              ! HistoryAutoAddVariable の *xtypes* で指定した
+                              ! データ型へ変換されます. 
+                              ! 
+                              ! Output data. 
+                              !
+                              ! Integer, single or double precision are 
+                              ! acceptable as data type. 
+                              ! Note that when this is output to a file, 
+                              ! data type is converted into "xtype" 
+                              ! specified in "HistoryAutoAddVariable"
+                              ! 
+                    })}})}
+    logical, intent(out), optional:: err
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              ! 例外処理用フラグ. 
+                              ! デフォルトでは, この手続き内でエラーが
+                              ! 生じた場合, プログラムは強制終了します. 
+                              ! 引数 *err* が与えられる場合, 
+                              ! プログラムは強制終了せず, 代わりに
+                              ! *err* に .true. が代入されます. 
+                              !
+                              ! Exception handling flag. 
+                              ! By default, when error occur in 
+                              ! this procedure, the program aborts. 
+                              ! If this *err* argument is given, 
+                              ! .true. is substituted to *err* and 
+                              ! the program does not abort. 
+                    })}})}
+
+    type(GT_HISTORY), pointer:: gthist =>null()
+                              ! gtool_history モジュール用構造体. 
+                              ! Derived type for "gtool_history" module
+
+                    #{ifelse(num, 0, %Q{
+                    }, %Q{
+    #{$type_intent_in[type]}, pointer:: #{ValueOrArray(num)}_slice#{array_colon("#{num}")} =>null()
+    type(SLICE_INFO), pointer:: sv =>null()
+    #{$type_intent_in[type]}, pointer:: #{ValueOrArray(num)}_avr#{array_colon("#{num}")} =>null()
+                    })}
+    real(DP):: settime
+    integer:: stat, i
+    integer:: vnum
+    character(STRING):: cause_c
+    integer, save:: svnum = 1, svtstep
+    character(*), parameter:: subname = "HistoryAutoPut#{type}#{num}"
+  continue
+    call BeginSub(subname, 'varname=%c', c1 = trim(varname) )
+    stat = DC_NOERR
+    cause_c = ""
+
+    ! 初期設定チェック
+    ! Check initialization
+    !
+    if ( .not. initialized ) then
+      stat = DC_ENOTINIT
+      cause_c = 'gtool_historyauto'
+      goto 999
+    end if
+
+    ! 時刻に関するエラー処理
+    ! Error handling for time
+    !
+    if ( time < zero_time ) then
+      cause_c = toChar( time )
+      call MessageNotify( 'W', subname, &
+        & '"time=<%c>" must be positive value (varname=<%c>).', &
+        & c1 = trim( cause_c ), c2 = trim( varname ) )
+      stat = DC_ENEGATIVE
+      cause_c = 'time'
+      goto 999
+    end if
+
+    ! 変数 ID のサーチ
+    ! Search variable ID
+    !
+    VarSearch: do
+      do i = svnum, numvars
+        if ( trim( varname_vars(i) ) == trim(varname) ) then
+          vnum = i
+          exit VarSearch
+        end if
+      end do
+      do i = 1, svnum - 1
+        if ( trim( varname_vars(i) ) == trim(varname) ) then
+          vnum = i
+          exit VarSearch
+        end if
+      end do
+
+      stat = HST_EBADVARNAME
+      cause_c = varname
+      goto 999
+    end do VarSearch
+
+    svnum = vnum
+
+    ! 定義モードからデータモードへ
+    ! Transit from define mode to data mode
+    !
+    if ( HstNmlInfoDefineMode( gthstnml ) ) then
+      call HstNmlInfoEndDefine( gthstnml ) ! (inout)
+    end if
+
+    ! 出力タイミングのチェックとファイルの作成
+    ! Check output timing and create files
+    !
+    call HstVarsOutputCheck( &
+      &        time = time, &    ! (in)
+      & stime_index = svtstep )  ! (out)
+
+    ! ファイルのオープン・クローズ・再オープン
+    ! Open, close, reopen files
+    !
+    if ( create_timing_vars(vnum, svtstep) &
+      &  .and. .not. histaddvar_vars(vnum)   ) then
+      call HstFileCreate( gthst_history_vars(vnum) % gthist, & ! (inout)
+        & varname_vars(vnum), time )                           ! (in)
+      histaddvar_vars(vnum) = .true.
+      if ( flag_output_prev_vars(vnum) ) then
+        prev_outtime_vars(vnum) = time
+      else
+        flag_output_prev_vars(vnum) = .true.
+        if ( origin_time_vars(vnum) > zero_time ) then
+          prev_outtime_vars(vnum) = origin_time_vars(vnum)
+        else
+          prev_outtime_vars(vnum) = time
+        end if
+      end if
+    end if
+
+    if ( close_timing_vars(vnum, svtstep) ) then
+      if ( HistoryInitialized( gthst_history_vars(vnum) % gthist ) ) then
+        call HistoryClose( gthst_history_vars(vnum) % gthist )   ! (inout)
+      end if
+    end if
+
+    if ( renew_timing_vars(vnum, svtstep) ) then
+      if ( HistoryInitialized( gthst_history_vars(vnum) % gthist ) ) then
+        call HistoryClose( gthst_history_vars(vnum) % gthist )   ! (inout)
+      end if
+      call HstFileCreate( gthst_history_vars(vnum) % gthist, & ! (inout)
+        & varname_vars(vnum), time )                           ! (in)
+      newfile_createtime_vars(vnum) = time
+      prev_outtime_vars(vnum) = time
+    end if
+
+    ! 出力が有効かどうかを確認する
+    ! Confirm whether the output is effective
+    !
+    if (       .not. output_timing_vars(vnum, svtstep) &
+      &  .and. .not. output_timing_avr_vars(vnum, svtstep) ) then
+
+      goto 999
+    end if
+
+    ! GT_HISTORY 変数の取得
+    ! Get "GT_HISTORY" variable
+    !
+    gthist => gthst_history_vars(vnum) % gthist
+
+
+    ! 空間切り出し
+    ! Slice of spaces
+    !
+                    #{ifelse(num, 0, %Q{
+    ! array only
+                    }, %Q{
+    sv => slice_vars(vnum)
+
+                      #{forloop("\\$num\\$", 1, num, %Q{
+!!$        write(*,*) '  sv%st($num$), sv%ed($num$), sv%sd($num$)=', sv%st($num$), sv%ed($num$), sv%sd($num$)
+                      })}
+
+    array_slice => array(sv%st(1):sv%ed(1):sv%sd(1) &
+                      #{forloop("\\$num\\$", 2, num, %Q{
+      & , sv%st($num$):sv%ed($num$):sv%sd($num$) &
+                      })}
+      & )
+                    })}
+
+
+    ! 空間平均
+    ! Spatial average
+    !
+                    #{ifelse(num, 0, %Q{
+    ! array only
+                    }, %Q{
+    if ( count(space_avr_vars(vnum) % avr) == 0 ) then
+      array_avr => array_slice
+    else
+      call AverageReduce( &
+        & array_slice, space_avr_vars(vnum) % avr, &   ! (in)
+                      #{forloop("\\$num\\$", 1, num, %Q{
+        & weight_vars(vnum) % wgt$num$( sv%st($num$):sv%ed($num$):sv%sd($num$) ) , &   ! (in)
+                      })}
+        & array_avr )                       ! (out)
+    end if
+
+    ! 座標重みを取得 ; Get weights of axes
+
+                    })}
+
+    ! 単位に応じて時刻を変換
+    ! Convert time according to units
+    !
+    if (      output_timing_vars(vnum, svtstep) &
+      &  .or. output_timing_avr_vars(vnum, svtstep) ) then
+
+      settime = &
+        & DCCalConvertByUnit( time, UNIT_SYMBOL_SEC, interval_unitsym_vars(vnum), cal_save )
+    end if
+
+    ! 時刻設定
+    ! Set time
+    !
+    if ( output_timing_vars(vnum, svtstep) ) then
+      call HistorySetTime( &
+        & history = gthist, &   ! (in) optional
+        & timed = settime )     ! (in) optional
+    end if
+
+    ! 出力
+    ! OutPut
+    !
+    if ( output_timing_avr_vars(vnum, svtstep) ) then
+      call HistoryPut( &
+        & varname, &              ! (in)
+                      #{ifelse(num, 0, %Q{
+        & (/value/), &            ! (in)
+                      }, %Q{
+        & array_avr, &            ! (in)
+                      })}
+        & timed = settime, &      ! (in) optional
+        & time_average_store = &
+        &   .not. output_timing_vars(vnum, svtstep), & ! (in) optional
+        & history = gthist )                  ! (inout) optional
+    else
+      call HistoryPut( &
+        & varname, &              ! (in)
+                      #{ifelse(num, 0, %Q{
+        & (/value/), &            ! (in)
+                      }, %Q{
+        & array_avr, &            ! (in)
+                      })}
+        & history = gthist )      ! (inout) optional
+    end if
+
+    ! 最後に出力した時刻を保存
+    ! Save last time of output
+    !
+    if ( output_timing_vars(vnum, svtstep) ) then
+      if ( .not. create_timing_vars(vnum, svtstep) .and. &
+        &  .not. renew_timing_vars(vnum, svtstep) ) then
+
+        if ( mod(time, interval_time_vars(vnum) ) == zero_time ) then
+          prev_outtime_vars(vnum) = time
+        else
+          prev_outtime_vars(vnum) = &
+            & prev_outtime_vars(vnum) + interval_time_vars(vnum)
+        end if
+      end if
+    end if
+
+    ! 結合解除
+    ! Release associations
+    !
+    nullify( gthist )
+                    #{ifelse(num, 0, %Q{
+                    }, %Q{
+    nullify( array_avr, array_slice )
+                    })}
+
+999 continue
+    call StoreError(stat, subname, cause_c = cause_c, err = err)
+    call EndSub(subname)
+  end subroutine HistoryAutoPut#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+undef ValueOrArray
+undef ArgsToPut
+
+types = ["Double", "Real", "Int"]
+def ValueOrArray(num)
+  return "value" if num == 0
+  return "array"
+end
+def ArgsToPut(num)
+  return "(/value/)" if num == 0
+  return "array"
+end
+types.each{ |type|
+for num in 0..$histput_dim
+print <<"__EndOfFortran90Code__"
+
+  subroutine HistoryAutoPutOld1#{type}#{num}( &
+    & time, varname, #{ValueOrArray(num)}, &  ! (in)
+    & err &                                   ! (out) optional
+    & )
+    use gtool_historyauto_generic, only: HistoryAutoPut
+    use dc_date_generic, only: operator(-), operator(+), &
+      & operator(>), operator(<), mod, operator(==), toChar, EvalSec, &
+      & DCDiffTimePutLine, assignment(=)
+    use dc_types, only: DP, STRING, TOKEN
+    use dc_date_types, only: DC_DIFFTIME, DC_DATETIME
+    implicit none
+    type(DC_DIFFTIME), intent(in):: time
+    character(*), intent(in):: varname
+    #{$type_intent_in[type]}, intent(in), target:: #{ValueOrArray(num)}#{array_colon("#{num}")}
+    logical, intent(out), optional:: err
+
+    real(DP):: timed
+
+  continue
+    timed = EvalSec( time )
+
+    call HistoryAutoPut( &
+      & timed, varname, #{ValueOrArray(num)}, &  ! (in)
+      & err )                                    ! (out) optional
+
+  end subroutine HistoryAutoPutOld1#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+undef ValueOrArray
+undef ArgsToPut
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

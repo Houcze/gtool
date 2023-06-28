@@ -1,0 +1,73 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+require("optparse")
+#
+# "sysdepenv-****.f90" Generator with Ruby.
+#
+opt = OptionParser.new
+opt.on('--envtype=VAL') {|v| $envtype = v}
+opt.parse!(ARGV)
+$envtype = "NOSTD" unless $envtype
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!== SysdepEnv - 環境依存性ルーチン (環境変数取得)
+!
+! Authors::   Yasuhiro MORIKAWA
+! Version::   $Id: sysdepenv.rb2f90,v 1.2 2009-03-22 02:17:31 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2006. All rights reserved.
+! License::   See COPYRIGHT[link:../../COPYRIGHT]
+!
+! Fortran 95 以前の大抵の処理系では GETENV というサービスサブルーチンが
+! 用意されている. (Fortran90/95 の規格には含まれていない). 
+! Fortran 2003 規格には GET_ENVIRONMENT_VARIABLE というサブルーチンが
+! 規定されている. これらを使えない処理系では適宜対処が必要である. 
+!
+__EndOfFortran90Code__
+
+print <<"__EndOfFortran90Code__"
+
+subroutine SysdepEnvGet(env, str)
+  !
+  ! この手続きは *env* に指定した環境変数の値を *str* へ返します.
+  ! *env* 指定した環境変数が定義されていない場合は空文字が *str* へ
+  ! 返ります.
+  ! 処理系が <b>GET_ENVIRONMENT_VARIABLE()</b> または 
+  ! <b>GETENV()</b> を有していない場合は常に空文字が *str* へ
+  ! 返ります.
+  !
+  ! This procedure returns environment variable which is specified
+  ! by *env* to *str*.
+  ! If the environment variable is not set, blank is returned to *str*.
+  ! If <b>GET_ENVIRONMENT_VARIABLE()</b> or
+  ! <b>GETENV()</b> is not implemented, blank is returned to *str*
+  ! at all times.
+  !
+  implicit none
+  character(len = *), intent(in)  :: env ! 環境変数名
+  character(len = *), intent(out) :: str ! 環境変数の値
+continue
+#{ifelse($envtype, "NOGETENV", %Q{
+  str = ''
+}, $envtype, "F2003STD", %Q{
+  call get_environment_variable(trim(adjustl(env)), str)
+}, %Q{
+  call getenv(trim(adjustl(env)), str)
+})}
+end subroutine SysdepEnvGet
+
+__EndOfFortran90Code__
+
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

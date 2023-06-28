@@ -1,0 +1,77 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro") 
+require("optparse")
+#
+# "polymorphism.f90" Generator with Ruby.
+#
+opt = OptionParser.new
+opt.on('--maxdim=VAL') {|v| $maxdim = v.to_i}
+opt.parse!(ARGV)
+$maxdim = 7 unless $maxdim
+
+
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= polymorphism: rb2f90 サンプルコード
+!
+module polymorphism
+
+  interface Polymor
+                    #{foreach("\\$type\\$", "Int", "Real", "Double", %Q{
+                    #{forloop("\\$num\\$", 0, $maxdim, %Q{
+    module procedure Polymor$type$$num$
+                    })}
+                    })}
+  end interface
+
+contains
+
+__EndOfFortran90Code__
+
+
+types = ["Int", "Real", "Double"]
+types.each{ |type|
+for num in 0..$maxdim
+print <<"__EndOfFortran90Code__"
+
+    subroutine Polymor#{type}#{num}(array)
+      use dc_types, only: DP
+      #{$type_intent_inout[type]}, intent(inout) :: array#{array_colon("#{num}")}
+      character(*), parameter:: subname = 'Polymor#{type}#{num}'
+
+      write(*,*) subname, ' is called'
+
+      array = array + 1#{$type_numsuf[type]}
+
+                    #{ifelse(num, 0, %Q{
+      write(*,*) 'sum=', array
+                    }, %Q{
+      write(*,*) 'sum=', sum(array, .true.)
+                    })}
+
+    end subroutine Polymor#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+
+print <<"__EndOfFortran90Code__"
+
+end module polymorphism
+
+__EndOfFortran90Code__
+
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

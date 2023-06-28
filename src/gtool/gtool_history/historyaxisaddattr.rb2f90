@@ -1,0 +1,160 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+#
+# "historyaddattr.F90" Generator with Ruby.
+#
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= GT_HISTORY_AXIS への属性付加
+!= Add attributes to GT_HISTORY_AXIS
+!
+! Authors::   Yasuhiro MORIKAWA
+! Version::   $Id: historyaxisaddattr.rb2f90,v 1.2 2009-05-25 09:45:20 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2000-2009. All rights reserved.
+! License::   See COPYRIGHT[link:../../../COPYRIGHT]
+!
+__EndOfFortran90Code__
+
+
+types = ["Char", "Logical", "Int", "Real", "Double"]
+def toChar(type, value)
+  return "trim(#{value})" if type == "Char"
+  return "trim(toChar(#{value}))"
+end
+def Num2Array(type, value)
+  return value if type == "Char"
+  return value if type == "Logical"
+  return "(/#{value}/)"
+end
+types.each{ |type|
+for num in 0..1
+next if num == 1 && type == "Char"
+next if num == 1 && type == "Logical"
+print <<"__EndOfFortran90Code__"
+
+  subroutine HistoryAxisAddAttr#{type}#{num}( &
+    & axis, attrname, value)
+    !
+                    #{ifelse(type, "Char", %Q{
+    !
+    !== GT_HISTORY_AXIS 型変数への属性付加
+    !
+    ! GT_HISTORY_AXIS 型の変数 *axis* へ属性を付加します。
+    !
+    ! *HistoryAxisAddAttr* は複数のサブルーチンの総称名です。
+    ! value には様々な型の引数を与えることが可能です。
+    ! 下記のサブルーチンを参照ください。
+    !
+                    })}
+    !
+    use gtool_history_generic, only: HistoryAxisInquire
+    use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO, GT_HISTORY_ATTR
+    use gtool_history_internal, only: default, copy_attrs
+    use gtdata_generic, only: Put_Attr
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_types, only: STRING, TOKEN, DP
+    use dc_string, only: toChar, JoinChar
+    use dc_url, only: GT_PLUS
+    implicit none
+    type(GT_HISTORY_AXIS),intent(inout) :: axis
+    character(*), intent(in):: attrname ! 属性の名前
+    #{$type_intent_in[type]}, intent(in):: value#{array_colon("#{num}")}
+                    #{ifelse(type, "Char", %Q{
+                              ! 属性に与えられる値
+                              ! 
+                              ! 配列の場合でも、数値型以外
+                              ! では配列の 1 つ目の要素のみ
+                              ! 値として付加されます。
+                              ! 
+                    })}
+    type(GT_HISTORY_ATTR), pointer:: attrs_tmp(:)
+    integer:: attrs_num
+    character(STRING) :: name
+    character(*), parameter:: subname = "HistoryAxisAddAttr#{type}#{num}"
+  continue
+    call BeginSub(subname, &
+      & 'attrname=<%c>, value=<%c>', &
+      & c1=trim(attrname), c2=#{toChar(type, "value")})
+    call HistoryAxisInquire( axis, name )
+    call DbgMessage('axis name=<%c>', c1=trim(name))
+
+    ! これまでの属性を保持しつつ配列を1つ増やす
+    if ( .not. associated(axis % attrs) ) then
+      allocate( axis % attrs(1) )
+      attrs_num = 1
+    else
+      attrs_num = size( axis % attrs ) + 1
+      ! 配列データの領域確保
+      allocate( attrs_tmp(attrs_num - 1) )
+      call copy_attrs( from = axis % attrs(1:attrs_num - 1), &
+        &                to = attrs_tmp(1:attrs_num - 1))
+      deallocate( axis % attrs )
+      allocate( axis % attrs(attrs_num) )
+      call copy_attrs( from = attrs_tmp(1:attrs_num - 1), &
+        &                to = axis % attrs(1:attrs_num - 1))
+      deallocate( attrs_tmp )
+    endif
+
+    axis % attrs(attrs_num) % attrname  = attrname
+    axis % attrs(attrs_num) % attrtype  = '#{type}'
+                    #{ifelse(num, 0, %Q{
+    axis % attrs(attrs_num) % array     = .false.
+    axis % attrs(attrs_num) % #{type}value = value
+                    }, num, 1, %Q{
+    axis % attrs(attrs_num) % array                = .true.
+    allocate(  axis % attrs(attrs_num) % #{type}array( size(value) )  )
+    axis % attrs(attrs_num) % #{type}array    = value
+                    })}
+
+    call EndSub(subname)
+  end subroutine HistoryAxisAddAttr#{type}#{num}
+
+  !-------------------------------------------------------------------
+
+  subroutine HistoryAxisAddAttr2#{type}#{num}( &
+    & axis, attrname, value)
+    !
+                    #{ifelse(type, "Char", %Q{
+    !
+    ! 使用方法は HistoryAxisAddAttr と同様です. 
+    !
+    ! Usage is same as "HistoryAxisAddAttr".
+    !
+    !--
+    ! 総称名 Put_Attr として提供するための関数です. 
+    ! 機能は HistoryAxisAttr と同じです. 
+    !++
+                    })}
+    !
+    use gtool_history_generic, only: HistoryAxisAddAttr
+    use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO, GT_HISTORY_ATTR
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_types, only: STRING, TOKEN, DP
+    implicit none
+    type(GT_HISTORY_AXIS),intent(inout) :: axis
+    character(*), intent(in):: attrname ! 属性の名前
+    #{$type_intent_in[type]}, intent(in):: value#{array_colon("#{num}")}
+    character(*), parameter:: subname = "HistoryAxisAddAttr2#{type}#{num}"
+  continue
+    call BeginSub(subname)
+    call HistoryAxisAddAttr( axis, attrname, value )
+    call EndSub(subname)
+  end subroutine HistoryAxisAddAttr2#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

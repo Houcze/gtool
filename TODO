@@ -1,0 +1,11 @@
+= TODO
+
+* モジュールの依存関係の解消
+  * 例: dc_utils(dc_error) -> sysdep -> gtdata みたいなの.
+* configure 関連
+  * libnetcdff, libnetcdf の順番
+  * autotool 化
+  * chkfort.sh はとりあえず消すべき
+* NetCDF 4 対応
+* dc_test の分離?
+

@@ -1,0 +1,70 @@
+#= gtool_historyauto のテスト用 NAMELIST ファイル
+#= NAMELIST file for test of "gtool_historyauto"
+#
+# Authors::   Yasuhiro MORIKAWA
+# Version::   $Id: histauto_nml22.nml,v 1.1 2009-10-11 03:55:56 morikawa Exp $
+# Tag Name::  $Name:  $
+# Copyright:: Copyright (C) GFD Dennou Club, 2008. All rights reserved. 
+# License::   See COPYRIGHT[link:../../COPYRIGHT]
+#
+&gtool_historyauto_nml
+  IntValue = 1.0, 
+  IntUnit  = 'day', 
+  FilePrefix = 'xhistauto/test22-'
+!!$  NewFileIntValue = 30, 
+!!$  NewFileIntUnit  = 'day', 
+/
+&gtool_historyauto_nml
+  Name = 'u', 
+/
+&gtool_historyauto_nml
+  Name = 'v', 
+  IntValue = 2000.0, 
+  IntUnit  = 'sec', 
+  Precision = 'double', 
+  TimeAverage = .true.
+/
+&gtool_historyauto_nml
+  Name = 'w1', 
+  IntValue = 4.0, 
+  IntUnit  = 'hrs', 
+/
+&gtool_historyauto_nml
+  Name = 'w2', 
+  IntValue = 1.0, 
+  IntUnit  = 'day', 
+  OriginValue = 2.0,
+  OriginUnit  = 'day', 
+  TerminusValue = 9.0,
+  TerminusUnit  = 'day', 
+/
+&gtool_historyauto_nml
+  Name = 'w3', 
+  IntValue = 1.0, 
+  IntUnit  = 'hrs', 
+  NewFileIntValue = 6, 
+  NewFileIntUnit  = 'day', 
+/
+!!$&gtool_historyauto_nml
+!!$  Name = 'v', 
+!!$  TimeAverage = .true.,
+!!$  IntValue = 2.0, 
+!!$  IntUnit  = 'day', 
+!!$  OriginValue = 24.0,
+!!$  OriginUnit  = 'day', 
+!!$  TerminusValue = 36.0,
+!!$  TerminusUnit  = 'day', 
+!!$  NewFileIntValue = 6, 
+!!$  NewFileIntUnit  = 'day', 
+!!$/
+!!$&gtool_historyauto_nml
+!!$  Name = 'w', 
+!!$  IntValue      = 1.0, 
+!!$  IntUnit       = 'day', 
+!!$  OriginValue   = 25.0,
+!!$  OriginUnit    = 'day', 
+!!$  TerminusValue = 35.0,
+!!$  TerminusUnit  = 'day', 
+!!$  NewFileIntValue = 5, 
+!!$  NewFileIntUnit  = 'day', 
+!!$/

@@ -1,0 +1,38 @@
+!
+! データ出力の全体設定
+!
+&gtool_historyauto_nml
+  IntValue = 1.0,             ! データの出力間隔の数値
+  IntUnit = 'day',            ! データの出力間隔の単位
+  FilePrefix = 'exp1-',       ! データのファイル名の接頭詞
+/
+!
+! データ出力の個別設定
+!
+&gtool_historyauto_nml
+  Name = 'u'                  ! 出力変数
+  Precision = 'double',       ! データの精度
+  TimeAverage = .true.,       ! 出力データの平均化フラグ
+/
+&gtool_historyauto_nml
+  Name = 'v'                  ! 出力変数
+  File = 'exp1-v-day04-10.nc' ! ファイル名
+  OriginValue = 4.0,          ! 出力開始時刻
+  OriginUnit  = 'day',        ! 出力開始時刻の単位
+  TerminusValue = 10.0,       ! 出力終了時刻
+  TerminusUnit  = 'day',      ! 出力終了時刻の単位
+/
+&gtool_historyauto_nml
+  Name = 'h'                  ! 出力変数
+  SliceStart  =  10,  5       ! 空間方向の開始点
+  SliceEnd    =  30, 14       ! 空間方向の終了点
+  SliceStride =  1,  1        ! 空間方向の刻み幅
+/
+&gtool_historyauto_nml
+  Name = 'zeta'               ! 出力変数
+  Precision = 'double',       ! データの精度
+  SpaceAverage = .true., .false.,
+                              ! 平均化のフラグ
+  NewFileIntValue = 5,        ! ファイル分割時間間隔の数値
+  NewFileIntUnit  = 'day',    ! ファイル分割時間間隔の単位
+/

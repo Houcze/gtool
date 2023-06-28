@@ -1,0 +1,70 @@
+= 構造型と総称名との対応表
+
+== 概要
+
+{オブジェクト指向構成}[link:../lib-oop.htm] にも記述されるとおり、
+gtool5 ではクラスを構造データ型で表現します。
+個々の手続きは総称名で表現され、第 1 引数の型から
+個体名を判別して動作します。
+
+以下にライブラリで定義される、ユーザが目にする可能性のある構造データ型と、
+その構造データ型に関する手続きの一部を記します。
+
+== 対応表
+
+=== データ入出力に関する構造データ型
+
+<b>構造データ型</b>            :: <b>内容</b>
+
+gtool_history_types#GT_HISTORY :: gtool4 netCDF形式のデータを入出力するための変数
+
+                                  手続き: gtool_history_generic#HistoryCreate,
+                                  gtool_history_generic#HistoryAddVariable,
+                                  gtool_history_generic#HistoryPut,
+                                  gtool_history_generic#HistoryClose, ...
+
+gtool_history_types#GT_HISTORY_AXIS    :: gtool4 netCDF形式のデータの軸情報を格納するための変数
+                                    
+                                          手続き: gtool_history_generic#HistoryAxisCreate,
+                                          gtool_history_generic#HistoryAxisInquire, ...
+
+
+gtool_history_types#GT_HISTORY_VARINFO :: gtool4 netCDF形式のデータの変数情報を格納するための変数
+
+                                          手続き: gtool_history_generic#HistoryVarinfoCreate,
+                                          gtool_history_generic#HistoryVarinfoInquire, ...
+
+gtdata_types#GT_VARIABLE :: gtool4 変数
+
+                            手続き: gtdata_generic#Create,
+                            gtdata_generic#Close, ..
+
+gtdata_netcdf_types#GD_NC_VARIABLE :: netCDF 変数
+
+                                      手続き: gtdata_netcdf_generic#Create,
+                                      gtdata_netcdf_generic#Close, ..
+
+=== 汎用ライブラリの構造データ型
+
+
+<b>構造データ型</b>       :: <b>内容</b>
+
+dc_date_types#DC_DATETIME :: 日時を表すための変数.
+
+                             手続き: dc_date_generic#DCDateTimeCreate, dc_date_generic#Eval, ...
+
+dc_date_types#DC_DIFFTIME :: 日時差を表すための変数.
+
+                             手続き: dc_date_generic#DCDiffTimeCreate, dc_date_generic#Eval, ...
+
+dc_clock#CLOCK            :: CPU の計測時間を保持するための変数.
+
+                             手続き: dc_clock#DCClockCreate, dc_clock#DCClockStart, dc_clock#DCClockStop ...
+
+dc_args#ARGS              :: コマンドライン引数を取り扱うための変数.
+
+                             手続き: dc_args#DCArgsOpen, dc_args#DCArgsGet, dc_args#DCArgsOption ...
+
+dc_hash#HASH              :: ハッシュを扱うための変数
+
+                             手続き: dc_hash#DCHashPut, dc_hash#DCHashGet ...

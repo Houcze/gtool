@@ -1,0 +1,115 @@
+#= Makefile for RDoc documentation
+#
+# Authors::   Yasuhiro MORIKAWA
+# Version::   $Id: Makefile.rdoc-dev,v 1.6 2009-05-29 15:14:11 morikawa Exp $
+# Tag Name::  $Name:  $
+# Copyright:: Copyright (C) GFD Dennou Club, 2004-2008. All rights reserved.
+# License::   See COPYRIGHT[link:../COPYRIGHT]
+#
+# in Config.mk, DEST_DOC is defined
+#
+######################################################################
+#
+#== Settings
+
+DIRDEPTH=..
+INCLUDEFILE = $(DIRDEPTH)/Config.mk
+include $(INCLUDEFILE) # Include file              (optional)
+                       # [JA] インクルードファイル (任意)
+
+CURRENTDIR	= $(DIRDEPTH)/doc
+                       # Current Directory         (necessary)
+                       # [JA] カレントディレクトリ (必須)
+OUTPUTDIR	= develop_reference
+                       # Document directory        (necessary)
+                       # [JA] 出力先ディレクトリ   (必須)
+SRCDIR		= $(DIRDEPTH)/src/
+                       # Source code directory               (necessary)
+                       # [JA] ソースコード置き場ディレクトリ (必須)
+SRCFILES	= SRC_LIST \
+		  ../script/*/*.rb \
+		  *.rdoc \
+		  netcdf/*.[fF]90 sysdep/*.[fF]90 \
+		  dc_utils/dc[a-z]*.[fF]90 dc_utils/dc_*_*.[fF]90 \
+		  `find -regex ".*dc_[a-z]+\.[fF]90" | grep -v dc_utils.f90` \
+		  dc_utils/dc_utils.f90 \
+		  gtdata/gtdata_netcdf/gtdata_netcdf_file/gdncfile*.[fF]90 \
+		  gtdata/gtdata_netcdf/gtdata_netcdf_file/gtdata_netcdf_file*.[fF]90 \
+		  gtdata/gtdata_memory/gdmem*.[fF]90 \
+		  gtdata/gtdata_memory/gtdata_memory*.[fF]90 \
+		  gtdata/gtdata_netcdf/gdnc*.[fF]90 \
+		  gtdata/gtdata_netcdf/gtdata_netcdf*.[fF]90 \
+		  gtdata/gtvar*.[fF]90 gtdata/gtdata*.[fF]90 \
+		  gtool/*/history*.[fF]90 gtool/*/hs*.[fF]90 \
+		  gtool/gtool_history/gtool_history_*.[fF]90 \
+		  gtool/gtool_history/gtool_history.[fF]90 \
+		  gtool/gtool_history_nmlinfo/gtool_history_nmlinfo_*.[fF]90 \
+		  gtool/gtool_history_nmlinfo/gtool_history_nmlinfo.[fF]90 \
+		  gtool/gtool_historyauto/gtool_historyauto_*.[fF]90 \
+		  gtool/gtool_historyauto/gtool_historyauto.[fF]90 \
+		  gtool/*.[fF]90
+                       # Source code files    (optional)
+                       # [JA] ソースファイル  (任意)
+MAINPAGE	= --main gtool5
+                       # Main pages         (optional)
+                       # [JA] メインページ  (任意)
+TITLE		= --title "gtool5 Reference Manual for Developers"
+                       # Title          (optional)
+                       # [JA] タイトル  (任意)
+RDOCOPTS	= -U --charset euc-jp --inline-source --line-numbers \
+		  --ignore-case --all
+                       # Options of RDoc                 (optional)
+                       # [JA] RDoc コマンドのオプション  (任意)
+RDOCCSS		= rdoc-style-gtool5.css
+                       # Cascade Style Sheet  (optional)
+                       # [JA] スタイルシート  (任意)
+
+# End Settings
+######################################################################
+
+######################################################################
+#== Set variables
+#
+SRCDIRSUFFIX = $(patsubst %/,%,$(strip $(SRCDIR)))/
+SRCPATH = $(SRCFILES:%=$(SRCDIRSUFFIX)%)
+CURRENTDIRSUFFIX = $(patsubst %/,%,$(strip $(CURRENTDIR)))/
+OUTPUTPATH = $(OUTPUTDIR:%=$(CURRENTDIRSUFFIX)%)
+
+######################################################################
+#== Rules
+#
+
+all: rdoc
+
+rdoc:
+	cd $(SRCDIR) ; \
+	$(RDOC) --op $(OUTPUTPATH) $(TITLE) \
+	$(RDOCOPTS) \
+	$(MAINPAGE) \
+	$(SRCFILES)
+	@if [ -f "$(RDOCCSS)" ]; then \
+		echo $(CP) $(RDOCCSS) $(OUTPUTDIR)/rdoc-style.css ;\
+		$(CP) $(RDOCCSS) $(OUTPUTDIR)/rdoc-style.css ;\
+	else \
+		echo "$(RDOCCSS) is not found" ;\
+	fi
+
+clean:
+	test -d $(OUTPUTPATH) || $(INSTALLDIR) $(OUTPUTPATH)
+	-cd $(OUTPUTPATH) ; \
+	$(RM) created.rid fr_class_index.html fr_file_index.html \
+		fr_method_index.html index.html rdoc-style.css ;\
+	$(RM) -r classes/ files/
+	-$(RMDIR) $(OUTPUTPATH)
+
+install:
+	test -d $(DEST_DOC) || $(INSTALLDIR) $(DEST_DOC)
+	$(INSTALLDIR) $(DEST_DOC)/$(OUTPUTDIR)
+	cp -r $(OUTPUTDIR)/* $(DEST_DOC)/$(OUTPUTDIR)/
+
+######################################################################
+#== Mode setting for Emacs
+#Local Variables:
+#mode: makefile
+#End:
+#

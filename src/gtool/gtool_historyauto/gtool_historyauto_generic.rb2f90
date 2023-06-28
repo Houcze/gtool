@@ -1,0 +1,504 @@
+#!/usr/bin/env ruby
+# -*- f90 -*- 
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+require("optparse")
+#
+# "gtool_historyauto_generic.f90" Generator with Ruby.
+#
+opt = OptionParser.new
+opt.on('--histput_dim=VAL') {|v| $histput_dim = v.to_i}
+opt.parse!(ARGV)
+$histput_dim = 7 unless $histput_dim
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= gtool_historyauto より提供される手続の引用仕様宣言
+!= Interface of procedures provided from gtool_historyauto
+!
+! Authors::   Yasuhiro MORIKAWA
+! Version::   $Id: gtool_historyauto_generic.rb2f90,v 1.7 2010-12-28 09:29:09 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2008. All rights reserved. 
+! License::   See COPYRIGHT[link:../../../COPYRIGHT]
+!
+
+module gtool_historyauto_generic
+  !
+  != gtool_historyauto より提供される手続の引用仕様宣言
+  != Interface of procedures provided from gtool_historyauto
+  !
+  ! <b>Note that Japanese and English are described in parallel.</b>
+  !
+  ! モジュールの概要や使用方法については, gtool_historyauto 
+  ! を参照ください. 
+  !
+  ! See "gtool_historyauto" for brief and usage of this module. 
+  !
+  !== Procedures list
+  !
+  ! HistoryAutoCreate          :: 初期化
+  ! HistoryAutoAddVariable     :: 変数追加
+  ! HistoryAutoPut             :: データ出力
+  ! HistoryAutoClose           :: 終了処理
+  ! HistoryAutoPutAxis         :: 座標データ追加
+  ! HistoryAutoAddWeight       :: 座標重み追加
+  ! HistoryAutoAddAttr         :: 属性追加
+  ! HistoryAutoAllVarFix       :: 登録変数の確定
+  ! HistoryAutoPutAxisMPI      :: 領域全体の座標データ指定 (MPI 使用時のみ有効)
+  ! HistoryAutoChkOutput       :: 変数の出力設定の確認
+  ! HistoryAutoChkOutputTiming :: 変数の出力設定の確認 (経過時間指定)
+  ! ---------------------      :: ---------------------
+  ! HistoryAutoCreate          :: Initialization
+  ! HistoryAutoAddVariable     :: Addition of variables
+  ! HistoryAutoPut             :: Output of data
+  ! HistoryAutoClose           :: Termination
+  ! HistoryAutoPutAxis         :: Addition of data of axes
+  ! HistoryAutoAddWeight       :: Addition of weights of axes
+  ! HistoryAutoAddAttr         :: Addition of attributes
+  ! HistoryAutoAllVarFix       :: Fix register of variables
+  ! HistoryAutoPutAxisMPI      :: Specify data of axes in whole area (This is valid when MPI is used)
+  ! HistoryAutoChkOutput       :: Check output setting of a variable
+  ! HistoryAutoChkOutputTiming :: Check output setting of a variable (with elapsed time)
+  !
+
+  implicit none
+  private
+  public:: HistoryAutoCreate
+  public:: HistoryAutoClose
+  public:: HistoryAutoAddWeight
+  public:: HistoryAutoPutAxis
+  public:: HistoryAutoPutAxisMPI
+  public:: HistoryAutoAddVariable
+  public:: HistoryAutoPut
+  public:: HistoryAutoAddAttr
+  public:: HistoryAutoAllVarFix
+  public:: HistoryAutoChkOutput
+  public:: HistoryAutoChkOutputTiming
+
+  interface HistoryAutoCreate
+
+    subroutine HistoryAutoCreate1( &
+      & title, source, institution, &           ! (in)
+      & dims, dimsizes, longnames, units, &     ! (in)
+      & origin, terminus, &                     ! (in)
+      & xtypes, conventions, gt_version, &      ! (in) optional
+      & all_output, &                           ! (in) optional
+      & file_prefix, &                          ! (in) optional
+      & namelist_filename, &                    ! (in) optional
+      & interval, &                             ! (in) optional
+      & slice_start, slice_end, slice_stride, & ! (in) optional
+      & space_average, &                        ! (in) optional
+      & time_average, &                         ! (in) optional
+      & newfile_interval, &                     ! (in) optional
+      & rank, &                                 ! (in) optional
+      & origin_date, origin_date_invalid, &     ! (in) optional
+      & start_date,  cal, &                     ! (in) optional
+      & flag_mpi_gather, flag_mpi_split &       ! (in) optional
+      & ) !:doc-priority 40:
+      use dc_types, only: DP
+      use dc_date_types, only: DC_DATETIME
+      use dc_calendar, only: DC_CAL, DC_CAL_DATE
+
+      character(*), intent(in):: title
+      character(*), intent(in):: source
+      character(*), intent(in):: institution
+      character(*), intent(in):: dims(:)
+      integer, intent(in):: dimsizes (:)
+      character(*), intent(in):: longnames (:)
+      character(*), intent(in):: units(:)
+      real(DP), intent(in):: origin
+      real(DP), intent(in):: terminus
+      character(*), intent(in),  optional:: xtypes(:)
+      character(*), intent(in), optional:: conventions
+      character(*), intent(in), optional:: gt_version
+      logical, intent(in), optional:: all_output
+      character(*), intent(in), optional:: file_prefix
+      character(*), intent(in), optional:: namelist_filename
+      real(DP), intent(in), optional:: interval
+      integer, intent(in), optional:: slice_start(:)
+      integer, intent(in), optional:: slice_end(:)
+      integer, intent(in), optional:: slice_stride(:)
+      logical, intent(in), optional:: space_average(:)
+      logical, intent(in), optional:: time_average
+      integer, intent(in), optional:: newfile_interval
+      character(*), intent(in), optional:: rank
+      type(DC_DATETIME), intent(in), optional:: origin_date
+      logical, intent(in), optional:: origin_date_invalid
+      type(DC_CAL_DATE), intent(in), optional:: start_date
+      type(DC_CAL), intent(in), optional:: cal
+      logical, intent(in), optional:: flag_mpi_gather
+      logical, intent(in), optional:: flag_mpi_split
+
+    end subroutine HistoryAutoCreate1
+
+    subroutine HistoryAutoCreate2( &
+      & title, source, institution, &           ! (in)
+      & dims, dimsizes, longnames, units, &     ! (in)
+      & xtypes, conventions, gt_version,&       ! (in) optional
+      & all_output, &                           ! (in) optional
+      & file_prefix, &                          ! (in) optional
+      & namelist_filename, &                    ! (in) optional
+      & interval, origin, terminus, &           ! (in) optional
+      & slice_start, slice_end, slice_stride, & ! (in) optional
+      & space_average, &                        ! (in) optional
+      & time_average, &                         ! (in) optional
+      & newfile_interval, &                     ! (in) optional
+      & rank, &                                 ! (in) optional
+      & origin_date, origin_date_invalid, &     ! (in) optional
+      & start_date, cal, &                      ! (in) optional
+      & flag_mpi_gather, flag_mpi_split &       ! (in) optional
+      & ) !:doc-priority 60:
+      use dc_date_types, only: DC_DATETIME, DC_DIFFTIME
+      use dc_calendar, only: DC_CAL, DC_CAL_DATE
+
+      character(*), intent(in):: title
+      character(*), intent(in):: source
+      character(*), intent(in):: institution
+      character(*), intent(in):: dims(:)
+      integer, intent(in):: dimsizes (:)
+      character(*), intent(in):: longnames (:)
+      character(*), intent(in):: units(:)
+      character(*), intent(in),  optional:: xtypes(:)
+      character(*), intent(in), optional:: conventions
+      character(*), intent(in), optional:: gt_version
+      logical, intent(in), optional:: all_output
+      character(*), intent(in), optional:: file_prefix
+      character(*), intent(in), optional:: namelist_filename
+      real, intent(in), optional:: interval
+      real, intent(in), optional:: origin
+      real, intent(in), optional:: terminus
+      integer, intent(in), optional:: slice_start(:)
+      integer, intent(in), optional:: slice_end(:)
+      integer, intent(in), optional:: slice_stride(:)
+      logical, intent(in), optional:: space_average(:)
+      logical, intent(in), optional:: time_average
+      integer, intent(in), optional:: newfile_interval
+      character(*), intent(in), optional:: rank
+      type(DC_DATETIME), intent(in), optional:: origin_date
+      logical, intent(in), optional:: origin_date_invalid
+      type(DC_CAL_DATE), intent(in), optional:: start_date
+      type(DC_CAL), intent(in), optional:: cal
+      logical, intent(in), optional:: flag_mpi_gather
+      logical, intent(in), optional:: flag_mpi_split
+
+    end subroutine HistoryAutoCreate2
+
+    subroutine HistoryAutoCreate3( &
+      & title, source, institution, &           ! (in)
+      & dims, dimsizes, longnames, units, &     ! (in)
+      & origin, terminus, &                     ! (in)
+      & xtypes, conventions, gt_version, &      ! (in) optional
+      & all_output, &                           ! (in) optional
+      & file_prefix, &                          ! (in) optional
+      & namelist_filename, &                    ! (in) optional
+      & interval, &                             ! (in) optional
+      & slice_start, slice_end, slice_stride, & ! (in) optional
+      & space_average, &                        ! (in) optional
+      & time_average, &                         ! (in) optional
+      & newfile_interval, &                     ! (in) optional
+      & rank, &                                 ! (in) optional
+      & origin_date, origin_date_invalid, &     ! (in) optional
+      & start_date,  cal, &                     ! (in) optional
+      & flag_mpi_gather, flag_mpi_split &       ! (in) optional
+      & ) !:doc-priority 70:
+      use dc_date_types, only: DC_DATETIME, DC_DIFFTIME
+      use dc_calendar, only: DC_CAL, DC_CAL_DATE
+
+      character(*), intent(in):: title
+      character(*), intent(in):: source
+      character(*), intent(in):: institution
+      character(*), intent(in):: dims(:)
+      integer, intent(in):: dimsizes (:)
+      character(*), intent(in):: longnames (:)
+      character(*), intent(in):: units(:)
+      type(DC_DIFFTIME), intent(in):: origin
+      type(DC_DIFFTIME), intent(in):: terminus
+      character(*), intent(in),  optional:: xtypes(:)
+      character(*), intent(in), optional:: conventions
+      character(*), intent(in), optional:: gt_version
+      logical, intent(in), optional:: all_output
+      character(*), intent(in), optional:: file_prefix
+      character(*), intent(in), optional:: namelist_filename
+      type(DC_DIFFTIME), intent(in), optional:: interval
+      integer, intent(in), optional:: slice_start(:)
+      integer, intent(in), optional:: slice_end(:)
+      integer, intent(in), optional:: slice_stride(:)
+      logical, intent(in), optional:: space_average(:)
+      logical, intent(in), optional:: time_average
+      integer, intent(in), optional:: newfile_interval
+      character(*), intent(in), optional:: rank
+      type(DC_DATETIME), intent(in), optional:: origin_date
+      logical, intent(in), optional:: origin_date_invalid
+      type(DC_CAL_DATE), intent(in), optional:: start_date
+      type(DC_CAL), intent(in), optional:: cal
+      logical, intent(in), optional:: flag_mpi_gather
+      logical, intent(in), optional:: flag_mpi_split
+
+    end subroutine HistoryAutoCreate3
+
+  end interface
+
+  interface HistoryAutoClose
+    subroutine HistoryAutoClose1
+    end subroutine HistoryAutoClose1
+  end interface
+
+  interface HistoryAutoAddWeight
+
+__EndOfFortran90Code__
+
+types = ["Real", "Double", "Int"]
+types.each{ |type|
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryAutoAddWeight#{type}( &
+      & dim, weight, &  ! (in)
+      & units, xtype &  ! (in) optional
+      & )
+      use dc_types, only: DP
+
+      character(*), intent(in):: dim
+      #{$type_intent_in[type]}, intent(in):: weight(:)
+      character(*), intent(in), optional:: units
+      character(*), intent(in),  optional:: xtype
+    end subroutine HistoryAutoAddWeight#{type}
+
+__EndOfFortran90Code__
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+  interface HistoryAutoPutAxis
+
+__EndOfFortran90Code__
+
+types = ["Real", "Double", "Int"]
+types.each{ |type|
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryAutoPutAxis#{type}( &
+      & dim, array &  ! (in)
+      & )
+      use dc_types, only: DP
+
+      character(*), intent(in):: dim
+      #{$type_intent_in[type]}, intent(in):: array(:)
+    end subroutine HistoryAutoPutAxis#{type}
+
+__EndOfFortran90Code__
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+  interface HistoryAutoPutAxisMPI
+
+__EndOfFortran90Code__
+
+types = ["Real", "Double", "Int"]
+types.each{ |type|
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryAutoPutAxisMPI#{type}( dim, array )
+      use dc_types, only: DP
+
+      character(*), intent(in):: dim
+      #{$type_intent_in[type]}, intent(in):: array(:)
+    end subroutine HistoryAutoPutAxisMPI#{type}
+
+__EndOfFortran90Code__
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+  interface HistoryAutoAddVariable
+
+    subroutine HistoryAutoAddVariable1( &
+      & varname, dims, longname, units, &      ! (in)
+      & xtype, time_units, time_average, &     ! (in) optional
+      & file, &                                ! (in) optional
+      & origin, terminus, interval, &           ! (in) optional
+      & slice_start, slice_end, slice_stride, & ! (in) optional
+      & space_average, &                        ! (in) optional
+      & newfile_interval &                      ! (in) optional
+      & ) !:doc-priority 40:
+      use dc_types, only: DP
+
+      character(*), intent(in):: varname
+      character(*), intent(in):: dims(:)
+      character(*), intent(in):: longname
+      character(*), intent(in):: units
+      character(*), intent(in), optional:: xtype
+      character(*), intent(in), optional:: time_units
+      logical, intent(in), optional:: time_average
+      character(*), intent(in), optional:: file
+      real(DP), intent(in), optional:: origin
+      real(DP), intent(in), optional:: terminus
+      real(DP), intent(in), optional:: interval
+      integer, intent(in), optional:: slice_start(:)
+      integer, intent(in), optional:: slice_end(:)
+      integer, intent(in), optional:: slice_stride(:)
+      logical, intent(in), optional:: space_average(:)
+      integer, intent(in), optional:: newfile_interval
+
+    end subroutine HistoryAutoAddVariable1
+
+    subroutine HistoryAutoAddVariable2( &
+      & varname, dims, longname, units, &       ! (in)
+      & xtype, time_units, time_average, &      ! (in) optional
+      & file, &                                 ! (in) optional
+      & origin, terminus, interval, &           ! (in) optional
+      & slice_start, slice_end, slice_stride, & ! (in) optional
+      & space_average, &                        ! (in) optional
+      & newfile_interval &                      ! (in) optional
+      & ) !:doc-priority 60:
+      use dc_date_types, only: DC_DIFFTIME
+
+      character(*), intent(in):: varname
+      character(*), intent(in):: dims(:)
+      character(*), intent(in):: longname
+      character(*), intent(in):: units
+      type(DC_DIFFTIME), intent(in):: origin
+      type(DC_DIFFTIME), intent(in):: terminus
+      type(DC_DIFFTIME), intent(in), optional:: interval
+      character(*), intent(in), optional:: xtype
+      character(*), intent(in), optional:: time_units
+      logical, intent(in), optional:: time_average
+      character(*), intent(in), optional:: file
+      integer, intent(in), optional:: slice_start(:)
+      integer, intent(in), optional:: slice_end(:)
+      integer, intent(in), optional:: slice_stride(:)
+      logical, intent(in), optional:: space_average(:)
+      integer, intent(in), optional:: newfile_interval
+
+    end subroutine HistoryAutoAddVariable2
+
+  end interface
+
+  interface HistoryAutoAddAttr
+
+__EndOfFortran90Code__
+
+types = ["Char", "Logical", "Int", "Real", "Double"]
+types.each{ |type|
+for num in 0..1
+next if num == 1 && type == "Char"
+next if num == 1 && type == "Logical"
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryAutoAddAttr#{type}#{num}( &
+      & varname, attrname, value &                 ! (in)
+      & )
+      use dc_types, only: DP
+
+      character(*), intent(in):: varname
+      character(*), intent(in):: attrname
+      #{$type_intent_in[type]}, intent(in):: value#{array_colon("#{num}")}
+    end subroutine HistoryAutoAddAttr#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+  interface HistoryAutoPut
+
+__EndOfFortran90Code__
+
+types = ["Double", "Real", "Int"]
+def ValueOrArray(num)
+  return "value" if num == 0
+  return "array"
+end
+types.each{ |type|
+for num in 0..$histput_dim
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryAutoPut#{type}#{num}( &
+      & time, varname, #{ValueOrArray(num)}, &  ! (in)
+      & err &                                   ! (out) optional
+      & ) #{ifelse(num, 0, %Q{ !:doc-priority 30: }, %Q{ !:doc-priority 40: })}  
+      use dc_date_types, only: DC_DIFFTIME
+      use dc_types, only: DP
+
+      real(DP), intent(in):: time
+      character(*), intent(in):: varname
+      #{$type_intent_in[type]}, intent(in), target:: #{ValueOrArray(num)}#{array_colon("#{num}")}
+      logical, intent(out), optional:: err
+    end subroutine HistoryAutoPut#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+types = ["Double", "Real", "Int"]
+def ValueOrArray(num)
+  return "value" if num == 0
+  return "array"
+end
+types.each{ |type|
+for num in 0..$histput_dim
+print <<"__EndOfFortran90Code__"
+
+    subroutine HistoryAutoPutOld1#{type}#{num}( &
+      & time, varname, #{ValueOrArray(num)}, &  ! (in)
+      & err &                                   ! (out) optional
+      & )  !:doc-priority 60:
+      use dc_date_types, only: DC_DIFFTIME
+      use dc_types, only: DP
+
+      type(DC_DIFFTIME), intent(in):: time
+      character(*), intent(in):: varname
+      #{$type_intent_in[type]}, intent(in), target:: #{ValueOrArray(num)}#{array_colon("#{num}")}
+      logical, intent(out), optional:: err
+    end subroutine HistoryAutoPutOld1#{type}#{num}
+
+__EndOfFortran90Code__
+end
+}
+
+print <<"__EndOfFortran90Code__"
+
+  end interface
+
+  interface HistoryAutoAllVarFix
+    subroutine HistoryAutoAllVarFix
+    end subroutine HistoryAutoAllVarFix
+  end interface
+
+  interface HistoryAutoChkOutput
+    logical function HistoryAutoChkOutput( varname ) result(result)
+      character(*), intent(in):: varname
+    end function HistoryAutoChkOutput
+  end interface
+
+  interface HistoryAutoChkOutputTiming
+    logical function HistoryAutoChkOutputTiming( time, varname ) result(result)
+      use dc_types, only: DP
+      real(DP), intent(in):: time
+      character(*), intent(in):: varname
+    end function HistoryAutoChkOutputTiming
+  end interface
+
+end module gtool_historyauto_generic
+
+__EndOfFortran90Code__
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

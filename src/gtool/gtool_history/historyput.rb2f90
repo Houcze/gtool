@@ -1,0 +1,1673 @@
+#!/usr/bin/env ruby
+# -*- f90 -*-
+# vi: set sw=4 ts=8:
+require("lib-rb2f90-macro")
+require("optparse")
+#
+# "historyput.F90" Generator with Ruby.
+#
+opt = OptionParser.new
+opt.on('--histput_dim=VAL') {|v| $histput_dim = v.to_i}
+opt.parse!(ARGV)
+$histput_dim = 7 unless $histput_dim
+print <<"__EndOfFortran90Code__"
+!--
+#{rb2f90_header_comment}!
+!++
+!
+!= gtool4 netCDF データの出力
+!= Output gtool4 netCDF data
+!
+! Authors::   Yasuhiro MORIKAWA, Eizi TOYODA
+! Version::   $Id: historyput.rb2f90,v 1.11 2009-10-28 10:59:22 morikawa Exp $
+! Tag Name::  $Name:  $
+! Copyright:: Copyright (C) GFD Dennou Club, 2000-2009. All rights reserved.
+! License::   See COPYRIGHT[link:../../../COPYRIGHT]
+!
+! 以下のサブルーチン, 関数は gtool_history から gtool_history_generic#HistoryPut
+! もしくは gtool_history_generic#HistoryPutPointer として提供されます.
+!
+! Following subroutines and functions are provided as
+! gtool_history_generic#HistoryPut or gtool_history_generic#HistoryPutPointer from
+! gtool_history.
+!
+
+__EndOfFortran90Code__
+
+types = ["Real", "Double", "Int", "Char"]
+types.each{ |type|
+print <<"__EndOfFortran90Code__"
+
+  recursive subroutine HistoryPut#{type}Ex( &
+    & varname, array, arraysize, history, range, &
+    & time, quiet, difftime, timed, time_average_store, err )
+    !
+    !== データ出力
+    !
+    ! こちらは配列サイズを指定する必要があるため、
+    ! HistoryPut を利用してください。
+    !
+    use gtool_history_types, only: GT_HISTORY
+    use gtool_history_generic, only: HistoryAxisInquire
+    use gtool_history_internal, only: default, lookup_variable_ord
+#ifdef LIB_MPI
+    use gtool_history_internal, only: gtmpi_axis_register, gtmpi_vars_mkindex
+#endif
+    use gtdata_generic, only: Put, GTVarSync, Slice, Inquire, &
+      & Get_Slice, Get, PutLine, Open, Close
+    use gtdata_types, only: GT_VARIABLE
+    use dc_types, only: STRING, DP
+    use dc_string, only: StoA, Printf, toChar, JoinChar
+    use dc_present, only: present_and_not_empty, present_select, &
+      & present_and_false, present_and_true
+    use dc_error, only: StoreError, DC_NOERR, DC_ENOTINIT, DC_EARGLACK, &
+      & USR_ERRNO, GT_EARGSIZEMISMATCH
+    use dc_message, only: MessageNotify
+    use dc_url, only: UrlSplit, UrlMerge
+    use dc_date_types, only: DC_DIFFTIME
+    use dc_date_generic, only: operator(==), DCDiffTimeCreate, &
+      & mod, operator(-), EvalByUnit, operator(/), toChar
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+#ifdef LIB_MPI
+    use mpi
+#endif
+    implicit none
+    character(*), intent(in):: varname
+    integer, intent(in):: arraysize
+    #{$type_intent_in[type]}, intent(in):: array(arraysize)
+    type(GT_HISTORY), intent(inout), target, optional:: history
+    character(*), intent(in), optional:: range
+                              ! gtool4 のコンマ記法による
+                              ! データの出力範囲指定
+                              !
+                              ! このオプションを用いる
+                              ! 際には、必ず *HistorySetTime*
+                              ! によって明示的に時刻の設定
+                              ! を行ってください。
+                              ! また、*HistoryGet* と異なり、
+                              ! 時刻に関する範囲指定は
+                              ! 行なえません。
+                              !
+                              ! 書式に関する詳細は
+                              ! {gtool4 netCDF 規約}[link:../xref.htm#label-6]
+                              ! の「5.4 コンマ記法」を参照して
+                              ! ください。
+    real, intent(in), optional:: time
+                              !
+                              ! 時刻. (単精度実数型)
+                              !
+                              ! この引数を与える場合,
+                              ! 出力するかどうかをプログラムが
+                              ! 自動的に判断します.
+                              ! *time* に与えられた数値が
+                              ! HistoryCreate に与えた *interval*
+                              ! で割り切れる場合には出力が行われます.
+                              !
+                              ! HistoryAddVariable で
+                              ! *time_average* (または *average*)
+                              ! に .true. を与えた場合には,
+                              ! *time*, *difftime*
+                              ! のどちらの引数も与えない場合に,
+                              ! プログラムはエラーを発生させます.
+                              !
+                              ! また, この引数と *range* は併用できません.
+                              ! 併用した場合には,
+                              ! プログラムはエラーを発生させます.
+                              !
+    logical, intent(in), optional:: quiet
+                              ! .false. を与えた場合,
+                              ! このサブルーチンが呼ばれる毎に
+                              ! ファイル名と時刻が表示されます.
+                              ! デフォルトは .true. です.
+                              !
+                              ! If ".false." is given,
+                              ! a filename and time is displayed
+                              ! when this subroutine is called.
+                              ! Default value is ".true.".
+                              !
+    type(DC_DIFFTIME), intent(in), optional:: difftime
+                              !
+                              ! 時刻 (dc_date_types#DC_DIFFTIME 型)
+                              !
+                              ! 効果は *time* と同様です.
+                              !
+    real(DP), intent(in), optional:: timed
+                              !
+                              ! 時刻 (倍精度実数型)
+                              !
+                              ! 効果は *time* と同様です.
+                              !
+    logical, intent(in), optional:: time_average_store
+                              !
+                              ! 平均値の出力フラグ.
+                              ! この値に .true. を与えた場合には,
+                              ! 出力せずに与えられた値を一旦蓄えます.
+                              ! .false. を与えた場合には,
+                              ! *time* もしくは *difftime* と
+                              ! HistoryCreate に与えた *interval* に
+                              ! 関わらず出力を行います.
+                              !
+                              ! HistoryAddVariable で
+                              ! *time_average* (または *average*)
+                              ! に .true. を与えない場合は無効です.
+                              !
+                              ! *time* と *difftime*
+                              ! のどちらかを同時に与える必要があります.
+                              !
+    logical, intent(out), optional:: err
+                              ! 例外処理用フラグ.
+                              ! デフォルトでは, この手続き内でエラーが
+                              ! 生じた場合, プログラムは強制終了します.
+                              ! 引数 *err* が与えられる場合,
+                              ! プログラムは強制終了せず, 代わりに
+                              ! *err* に .true. が代入されます.
+                              !
+                              ! Exception handling flag.
+                              ! By default, when error occur in
+                              ! this procedure, the program aborts.
+                              ! If this *err* argument is given,
+                              ! .true. is substituted to *err* and
+                              ! the program does not abort.
+
+    #{$type_internal[type]}, target:: array_work(arraysize)
+    #{$type_internal[type]}, pointer:: array_work2(:) =>null()
+    integer:: arraysize_work2
+    type(GT_VARIABLE):: var, timevar
+    character(STRING):: url, file, time_str
+    real:: time_value(1:1)
+    type(GT_HISTORY), pointer:: hst =>null()
+    integer, allocatable:: start(:), count(:), stride(:)
+    integer :: i, dims, v_ord
+    character(STRING):: avr_msg
+    logical :: slice_err
+    character(STRING):: time_name
+    character(*), parameter:: bnds_suffix = '_bnds'
+    type(GT_VARIABLE):: bndsvar
+    integer:: bnds_ord, time_count, bnds_rank
+    integer:: stat
+    logical:: output_step
+    real(DP):: timedw
+!    type(DC_DIFFTIME):: difftimew
+    real(DP):: avr_coef
+#ifdef LIB_MPI
+                    #{ifelse(type, "Char", %Q{
+                    }, %Q{
+    integer, allocatable:: array_overwrap(:)
+    integer:: new_index
+    type(GT_VARIABLE):: dimvar
+    integer:: numdims, dimord, dimsize, dimsize_max, allcount, ra
+    character(STRING):: dimname
+    integer:: st_mpi(MPI_STATUS_SIZE)
+    #{$type_internal[type]}, allocatable:: array_mpi_tmp(:)
+    #{$type_internal[type]}, allocatable:: array_mpi_all(:,:)
+                    })}
+    integer:: err_mpi
+#endif
+    character(STRING):: cause_c
+
+    interface TimeGoAhead
+      subroutine TimeGoAhead( varname, var, head, history, err )
+        use gtdata_types, only: GT_VARIABLE
+        use gtool_history_types, only: GT_HISTORY
+        character(len = *), intent(in):: varname
+        type(GT_VARIABLE), intent(out):: var
+        real, intent(in):: head
+        type(GT_HISTORY), intent(inout), optional, target:: history
+        logical, intent(out), optional:: err
+      end subroutine TimeGoAhead
+    end interface
+
+    character(*), parameter:: subname = "HistoryPut#{type}Ex"
+  continue
+    call BeginSub(subname, 'varname=%a range=%a', &
+      & ca=StoA(varname, present_select('', '(no-range)', range)))
+    stat = DC_NOERR
+    cause_c = ""
+
+    if (present(history)) then
+      hst => history
+    else
+      hst => default
+    endif
+
+    !-----------------------------------------------------------------
+    !  初期設定のチェック
+    !  Check initialization
+    !-----------------------------------------------------------------
+    if ( .not. hst % initialized ) then
+      stat = DC_ENOTINIT
+      cause_c = 'GT_HISTORY'
+      goto 999
+    end if
+
+    !-----------------------------------------------------------------
+    !  time と range の同時使用の禁止
+    !  Permit concurrent use of "time" and "range"
+    !-----------------------------------------------------------------
+    if ( ( present(time) .or. present(difftime) .or. present(timed) ) &
+      &  .and. present_and_not_empty(range) ) then
+      call MessageNotify('W', subname, &
+        & '(varname=%c) "range" and "time" or "timed" or "difftime" are not suppored at the same time', &
+        & c1 = trim(varname) )
+      stat = USR_ERRNO
+      cause_c = '"range" and "time" or "timed" or "difftime" are not suppored at the same time'
+      goto 999
+    end if
+
+    !-----------------------------------------------------------------
+    !  hst 内の varname 変数の変数番号を取得
+    !  Get variable number of "varname" in "hst"
+    !-----------------------------------------------------------------
+#ifndef LIB_MPI
+    v_ord = lookup_variable_ord(hst, varname)
+#else
+    if ( .not. hst % mpi_gather ) then
+      v_ord = lookup_variable_ord(hst, varname)
+    else
+      if ( hst % mpi_myrank == 0 ) then
+        v_ord = lookup_variable_ord(hst, varname)
+      end if
+      call MPI_Bcast( v_ord, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, err_mpi )
+      call DbgMessage('v_ord=<%d> is shared on all nodes.', i = (/v_ord/) )
+    end if
+#endif
+
+
+                    #{ifelse(type, "Char", %Q{
+                    }, %Q{
+    !-----------------------------------------------------------------
+    !  時間平均値のためのデータ格納
+    !  Store data for time average value
+    !-----------------------------------------------------------------
+    if ( present(difftime) ) then
+      timedw = EvalByUnit( difftime, '', hst % unlimited_units_symbol )
+    elseif ( present(timed) ) then
+      timedw = timed
+    elseif ( present(time) ) then
+      timedw = time
+    end if
+
+    if ( v_ord > 0 ) then
+      !
+      ! var_avr_count == -1: 平均処理は行わない.
+      ! var_avr_count >=  0: 平均処理を行う.
+      !
+      ! これらは HistoryAddVariable で指定される.
+      !
+      if ( hst % var_avr_count( v_ord ) > -1 ) then
+
+        ! 時刻が指定されない場合には平均処理が不可能なため
+        ! エラー発生. dc_error のエラーメッセージだけでは多少
+        ! 不親切なので, エラー直前に下記の警告メッセージ表示.
+        !
+        if (       .not. present(time) &
+          &  .and. .not. present(timed) &
+          &  .and. .not. present(difftime) ) then
+
+          call MessageNotify('W', subname, &
+            & '(varname=%c) arguments "time" or "timed" or "difftime" are needed ' // &
+            & 'when "time_average=.true." is specified to "HistoryAddVariable"', &
+            & c1 = trim(varname) )
+          stat = DC_EARGLACK
+          cause_c = 'time'
+          goto 999
+        end if
+
+        ! 与えられたデータのサイズと内部で積算しているデータのサイズが
+        ! 一致しない場合にもエラーを発生.
+        ! データサイズは HistoryPut -> HistoryPutEx の際に
+        ! 全て 1 次元化しているため, 単純に配列サイズでのみ判定.
+        ! dc_error のエラーメッセージだけでは多少
+        ! 不親切なので, エラー直前に下記の警告メッセージ表示.
+        !
+        if ( arraysize /= hst % var_avr_data( v_ord ) % length ) then
+          call MessageNotify('W', subname, &
+            & '(varname=%c) size of array should be (%d). size of array is (%d)', &
+            & i = (/hst % var_avr_data( v_ord ) % length, arraysize/), &
+            & c1 = trim(varname) )
+          stat = GT_EARGSIZEMISMATCH
+          cause_c = 'array'
+          goto 999
+        end if
+
+        ! この if 〜 end if では以下の動作を行う.
+        !
+        ! * 平均処理時の係数 (avr_coef) の算出
+        ! * 係数を算出するための以下の値の設定
+        !   * 基本時間間隔 (var_avr_baseint)
+        !   * 前回出力の時刻 (var_avr_prevtime)
+        ! * 初回出力の判定を行うラベル (var_avr_firstput) の設定
+        !
+
+        ! 1 度目に呼ばれた場合はとりあえず係数を 1.0 にするとともに,
+        ! prevtime に現在時刻を保管
+        !
+        if ( hst % var_avr_firstput( v_ord ) ) then
+          if ( hst % var_avr_count( v_ord ) == 0 ) then
+            avr_coef = 1.0_DP
+            hst % var_avr_prevtime( v_ord ) = timedw
+          else
+            hst % var_avr_baseint( v_ord ) = &
+              & timedw - hst % var_avr_prevtime( v_ord )
+            avr_coef = 1.0_DP
+            hst % var_avr_prevtime( v_ord ) = timedw
+            hst % var_avr_firstput( v_ord ) = .false.
+          end if
+
+        ! 2 度目以降に呼ばれた場合
+        !
+        else
+          ! 前回出力を行った (var_avr_count == 0 に初期化された)
+          ! 場合には baseint に前回時刻と今回時刻の差を設定.
+          ! avr_coef には 1 を設定.
+          ! 最後に prevtime に今回の時刻を保管.
+          !
+          if ( hst % var_avr_count( v_ord ) == 0 ) then
+            hst % var_avr_baseint( v_ord ) = &
+              & timedw - hst % var_avr_prevtime( v_ord )
+            avr_coef = 1.0_DP
+            hst % var_avr_prevtime( v_ord ) = timedw
+
+          ! var_avr_count > 0 (平均処理されるデータが蓄積されている)
+          ! 場合には avr_coef には前回時刻と今回時刻の差の,
+          ! baseint からの比を設定する.
+          ! 最後に prevtime に今回の時刻を保管.
+          !
+          else
+            avr_coef = ( timedw - hst % var_avr_prevtime( v_ord ) ) &
+              &          / hst % var_avr_baseint( v_ord )
+            hst % var_avr_prevtime( v_ord ) = timedw
+          end if
+        end if
+
+        ! 積算値 a_DataAvr に, 今回のデータに係数を掛けたもの
+        ! を加算する.
+        !
+        hst % var_avr_data( v_ord ) % a_DataAvr = &
+          & hst % var_avr_data( v_ord ) % a_DataAvr + array * avr_coef
+
+        ! 積算カウント var_avr_count に +1 し,
+        ! 係数の積算値 var_avr_coefsum に今回設定された
+        ! 係数を加算する.
+        !
+        hst % var_avr_count( v_ord ) = &
+          & hst % var_avr_count( v_ord ) + 1
+        hst % var_avr_coefsum( v_ord ) = &
+          & hst % var_avr_coefsum( v_ord ) + avr_coef
+
+        ! time_bnds(2) に今回の時刻を設定する.
+        ! (毎回上書きされる).
+        !
+        if ( present(difftime) ) then
+          hst % time_bnds(2:2) = EvalByUnit( difftime, '', hst % unlimited_units_symbol )
+        elseif ( present (timed) ) then
+          hst % time_bnds(2:2) = timed
+        else
+          hst % time_bnds(2:2) = time
+        end if
+
+      end if
+    end if
+
+                    })}
+
+    !-----------------------------------------------------------------
+    !  初期時刻の設定
+    !  Configure initial time
+    !-----------------------------------------------------------------
+    if ( .not. hst % origin_setting ) then
+      if ( present(difftime) ) then
+        hst % origin         = EvalByUnit( difftime, '', hst % unlimited_units_symbol )
+        hst % time_bnds      = EvalByUnit( difftime, '', hst % unlimited_units_symbol )
+        hst % origin_setting = .true.
+      elseif ( present(timed) ) then
+        hst % origin         = timed
+        hst % time_bnds      = timed
+        hst % origin_setting = .true.
+      elseif ( present(time) ) then
+        hst % origin         = time
+        hst % time_bnds      = time
+        hst % origin_setting = .true.
+      end if
+
+!!$      if ( present(difftime) ) then
+!!$        hst % origin         = difftime
+!!$        hst % time_bnds      = EvalByUnit( difftime, '', hst % unlimited_units_symbol )
+!!$        hst % origin_setting = .true.
+!!$      elseif ( present(timed) ) then
+!!$        call DCDiffTimeCreate( hst % origin, &              ! (out)
+!!$          & real(timed), '', hst % unlimited_units_symbol ) ! (in)
+!!$        hst % time_bnds      = timed
+!!$        hst % origin_setting = .true.
+!!$      elseif ( present(time) ) then
+!!$        call DCDiffTimeCreate( hst % origin, &       ! (out)
+!!$          & time, '', hst % unlimited_units_symbol ) ! (in)
+!!$        hst % time_bnds      = time
+!!$        hst % origin_setting = .true.
+!!$      end if
+
+    end if
+
+                    #{ifelse(type, "Char", %Q{
+    avr_msg = ''
+                    }, %Q{
+    !-----------------------------------------------------------------
+    !  時刻の自動チェック
+    !  Check time automatically
+    !-----------------------------------------------------------------
+    output_step = .true.
+    if ( present_and_false(time_average_store) ) then
+      output_step = .true.
+
+    elseif ( present_and_true(time_average_store) ) then
+      output_step = .false.
+
+    elseif ( present(difftime) .or. present(timed) .or. present(time) ) then
+      output_step = .false.
+      if ( hst % interval == 0 ) then
+        output_step = .true.
+      else
+        if ( mod( timedw - hst % origin, hst % interval ) == 0 ) then
+          output_step = .true.
+        end if
+      end if
+    end if
+
+
+    !-------------------------
+    !  時間平均値出力のための情報処理
+    !  Information processing for output time-averaged value
+    if ( .not. output_step ) then
+      goto 999
+    else
+      array_work = array
+      avr_msg = ''
+
+      if ( v_ord > 0 ) then
+        if ( hst % var_avr_count( v_ord ) > -1 ) then
+
+          if ( present_and_false(quiet) ) then
+
+            avr_msg = '(time average of ' // trim( toChar(hst % var_avr_count( v_ord )) ) // ' step data)'
+          end if
+
+          !-------------------
+          !  蓄えた値の時間平均化
+          !  Average stored value in time direction
+
+          ! a_DataAvr に蓄えられた値を係数の積算値で割って,
+          ! これを出力値とする.
+          !
+          array_work = &
+            & ( hst % var_avr_data( v_ord ) % a_DataAvr ) / ( hst % var_avr_coefsum( v_ord ) )
+
+          ! 積算値, 積算カウント, 係数の積算値をクリアする.
+          !
+          hst % var_avr_data( v_ord ) % a_DataAvr = 0.0
+          hst % var_avr_count( v_ord ) = 0
+          hst % var_avr_coefsum( v_ord ) = 0.0_DP
+          hst % var_avr_firstput( v_ord ) = .false.
+
+        end if
+      end if
+    end if
+
+
+#ifndef LIB_MPI
+    array_work2 => array_work
+    arraysize_work2 = arraysize
+#else
+
+    if ( .not. hst % mpi_gather ) then
+      array_work2 => array_work
+      arraysize_work2 = arraysize
+    else
+
+      !-----------------------------------------------------------------
+      !  MPI 使用時に, 座標軸のデータが与えられた場合には, そのデータを保管.
+      !  If data of axis is given, the data is stored when MPI is used
+      !-----------------------------------------------------------------
+      numdims = size( hst % mpi_fileinfo % axes )
+      if ( hst % mpi_myrank == 0 ) then
+        dimord = 0
+        do i = 1, numdims
+          call HistoryAxisInquire( &
+            & hst % mpi_fileinfo % axes(i), & ! (in)
+            & name = dimname )                ! (out)
+          if ( trim(varname) == trim(dimname) ) then
+            dimord = i
+            exit
+          end if
+        end do
+
+        call MPI_Bcast( dimord, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, err_mpi )
+      else
+        call MPI_Bcast( dimord, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, err_mpi )
+      end if
+
+      if ( dimord > 0 ) then
+
+        call HistoryAxisInquire( &
+          & hst % mpi_fileinfo % axes(dimord), & ! (in)
+          & size = dimsize_max )                 ! (out)
+
+        dimsize = size( array )
+        if ( dimsize > dimsize_max .and. hst % unlimited_index /= dimord ) then
+          call MessageNotify('W', subname, &
+            & 'dim=<%c> data size (%d) exceeds size of the dim (%d) by HistoryCreate. ' //  &
+            & 'the data will be trancated. ', &
+            & i = (/ dimsize, dimsize_max /), c1 = trim(varname) )
+          dimsize = dimsize_max
+        end if
+        if ( associated( hst % mpi_dimdata_each( dimord ) % a_Axis ) ) then
+          deallocate( hst % mpi_dimdata_each( dimord ) % a_Axis )
+        end if
+        allocate( hst % mpi_dimdata_each( dimord ) % a_Axis(dimsize) )
+        hst % mpi_dimdata_each( dimord ) % a_Axis = array(1:dimsize)
+        hst % mpi_dimdata_each( dimord ) % length = dimsize
+      end if
+
+      !-----------------------------------------------------------------
+      !  MPI 使用時に, 従属変数のデータが与えられた場合, データ集約の情報を整理.
+      !  If data of dependent variables is given,
+      !    information for integration is arranged when MPI is used
+      !-----------------------------------------------------------------
+      if ( v_ord > 0 ) then
+        if ( .not. associated( hst % mpi_gthr_info ) ) then
+          call gtmpi_axis_register( hst, err ) ! (inout)
+        end if
+        if ( present_and_true( err ) ) goto 999
+
+        if ( .not. associated( hst % mpi_vars_index( v_ord ) % allcount ) ) then
+          call gtmpi_vars_mkindex( hst, v_ord, err ) ! (inout)
+        end if
+        if ( present_and_true( err ) ) goto 999
+
+      end if
+
+
+      !-----------------------------------------------------------------
+      !  MPI 使用時は, 各ノードのデータを rank == 0 へ集約する.
+      !  Data on each node is integrated when MPI is used
+      !-----------------------------------------------------------------
+      if ( v_ord > 0 ) then
+
+        arraysize_work2 = hst % mpi_vars_index(v_ord) % allcount_all
+        if ( arraysize_work2 < 1 ) arraysize_work2 = 1
+
+        if ( hst % mpi_myrank == 0 ) then
+          do ra = 1, hst % mpi_nprocs - 1
+            allcount = hst % mpi_vars_index(v_ord) % allcount(ra)
+            call MPI_Send( allcount, 1, MPI_INTEGER, ra, 0, MPI_COMM_WORLD, err_mpi )
+          end do
+        else
+          call MPI_Recv( allcount, 1, MPI_INTEGER, 0, 0, MPI_COMM_WORLD, st_mpi, err_mpi )
+        end if
+
+        if ( hst % mpi_myrank /= 0 ) then
+          call MPI_Send( array_work, allcount, &
+            & #{$mpi_type[type]}, 0, 0, MPI_COMM_WORLD, err_mpi )
+        else
+          allocate( array_mpi_all(0: hst % mpi_nprocs - 1, arraysize_work2 ) )
+          allocate( array_mpi_tmp( arraysize_work2 ) )
+          array_mpi_all(:,:) = 0#{$type_numsuf[type]}
+          array_mpi_tmp(:) = 0#{$type_numsuf[type]}
+
+          allcount = hst % mpi_vars_index(v_ord) % allcount(0)
+          array_mpi_all(0,1:allcount) = array_work
+
+          do ra = 1, hst % mpi_nprocs - 1
+            allcount = hst % mpi_vars_index(v_ord) % allcount(ra)
+            call MPI_Recv( array_mpi_tmp(1:allcount), allcount, &
+              & #{$mpi_type[type]}, ra, 0, MPI_COMM_WORLD, st_mpi, err_mpi )
+            array_mpi_all(ra,1:allcount) = array_mpi_tmp(1:allcount)
+          end do
+
+          allocate( array_work2( arraysize_work2 ) )
+          allocate( array_overwrap( arraysize_work2 ) )
+          array_work2 = 0#{$type_numsuf[type]}
+          array_overwrap(:) = 0
+          do ra = 0, hst % mpi_nprocs - 1
+            do i = 1, hst % mpi_vars_index(v_ord) % allcount(ra)
+              new_index = hst % mpi_vars_index(v_ord) % each2all(ra, i)
+              array_work2( new_index ) = &
+                & array_work2( new_index ) + array_mpi_all( ra, i )
+              array_overwrap( new_index ) = array_overwrap( new_index ) + 1
+            end do
+          end do
+
+          where ( array_overwrap == 0 )
+            array_overwrap = 1
+          end where
+
+          array_work2(:) = array_work2(:) / array_overwrap(:)
+
+          deallocate( array_mpi_all, array_mpi_tmp, array_overwrap )
+          ! array_work2 はデータ出力の後に割り付け解除される.
+        end if
+
+      else
+        array_work2 => array_work
+        arraysize_work2 = arraysize
+      end if
+
+    end if
+#endif
+                    })}
+
+    !-----------------------------------------------------------------
+    !  時刻を1つ進めて, データ出力
+    !  Progress one time, and output data
+    !-----------------------------------------------------------------
+#ifdef LIB_MPI
+    if ( .not. hst % mpi_gather &
+      &  .or. ( hst % mpi_gather    .and. &
+      &         hst % mpi_myrank == 0 .and. &
+      &         hst % mpi_fileinfo % already_output) ) then
+#endif
+
+    call TimeGoAhead( &
+      & varname = varname, &     ! (in)
+                    #{ifelse(type, "Char", %Q{
+      & head = 0.0, &            ! (in)
+                    }, %Q{
+      & head = real(array_work2(1)), & ! (in)
+                    })}
+      & var = var, &             ! (out)
+      & history = history, &     ! (inout)
+      & err = err )              ! (out)
+
+
+                    #{ifelse(type, "Char", %Q{
+    if (present_and_not_empty(range)) then
+      call DbgMessage('varname=<%c> is string. so range is ignoread.', &
+      & c1=trim(varname))
+    end if
+    call Put(var, array, arraysize)
+    call GTVarSync(var)
+
+                    }, %Q{
+
+    call Inquire( var, & ! (in)
+      & alldims=dims )   ! (out)
+
+    if (present_and_not_empty(range) .and. (dims < 1)) then
+      call DbgMessage('varname=<%c> has no dimension. so range is ignoread.', &
+      & c1=trim(varname))
+    end if
+    if (.not. (present_and_not_empty(range) .and. (dims > 0))) then
+      ! range 無しの普通の出力の場合
+      call Put(var, array_work2, arraysize_work2)
+    else
+      ! range があり, 且つ varname がちゃんと次元を持っている場合
+      !
+      ! 元々の start, count, stride を保持. データを与えた後に復元する.
+      allocate(start(dims), count(dims), stride(dims))
+      do i = 1, dims
+        call Get_Slice(var, i, start(i), count(i), stride(i))
+      end do
+      slice_err = .false. ! 不要だが Slice の引用仕様として必要なため
+      call Slice(var, range, slice_err)
+      call Put(var, array_work2, arraysize_work2)
+      ! 復元
+      do i = 1, dims
+        call Slice(var, i, start(i), count(i), stride(i))
+      end do
+      deallocate(start, count, stride)
+    end if
+    call GTVarSync(var)
+
+    if ( hst % mpi_gather .and. v_ord > 0 ) then
+      deallocate( array_work2 )
+    end if
+
+                    })}
+
+#ifdef LIB_MPI
+    end if
+#endif
+
+                    #{ifelse(type, "Char", %Q{
+                    }, %Q{
+    !-----------------------------------------------------------------
+    !  "time_bnds" 変数への出力
+    !  Output to "time_bnds" variable
+    !-----------------------------------------------------------------
+#ifdef LIB_MPI
+    if ( .not. hst % mpi_gather &
+      &  .or. ( hst % mpi_gather    .and. &
+      &         hst % mpi_myrank == 0 .and. &
+      &         hst % mpi_fileinfo % already_output ) ) then
+#endif
+
+    if ( v_ord > 0 ) then
+      if ( hst % var_avr_count( v_ord ) > -1 ) then
+        !-------------------
+        !  時間次元の名前とファイル名を取得
+        !  Get name of time dimension, and filename
+        timevar = hst % dimvars( hst % unlimited_index )
+
+        call Inquire( &
+          & var = timevar, &   ! (in)
+          & url = url, &       ! (out)
+          & name = time_name ) ! (out)
+        call UrlSplit( fullname = url, &  ! (in)
+          & file = file )                 ! (out)
+
+        !-------------------
+        !  "time_bnds" 変数の取得
+        !  Get "time_bnds" variable
+        call Open( var = bndsvar, &
+          & url = UrlMerge(file=file, var=trim(time_name) // bnds_suffix) )
+        bnds_ord = lookup_variable_ord( hst, trim(time_name) // bnds_suffix)
+
+        !-------------------
+        !  "time_bnds" 変数への出力
+        !  Output to "time_bnds" variable
+        call Inquire( &
+          & var = bndsvar, &                        ! (in)
+          & rank = bnds_rank )                      ! (out)
+
+        time_count = 1
+        if ( bnds_rank > 1 ) then
+          call Inquire( &
+            & var = bndsvar, &                             ! (in)
+            & dimord = hst % growable_indices(bnds_ord), & ! (in)
+            & allcount = time_count )                      ! (out)
+        end if
+
+        if  ( (hst % time_bnds_output_count < 1) &
+          &  .or. (hst % time_bnds_output_count < time_count) ) then
+
+          call Slice(bndsvar, hst % growable_indices(bnds_ord), & ! (in)
+            & start=hst % time_bnds_output_count+1, count=1)        ! (in)
+          call Put(bndsvar, hst % time_bnds, 2)
+
+          hst % time_bnds_output_count = hst % time_bnds_output_count + 1
+        end if
+
+        call Close( var = bndsvar ) ! (inout)
+
+        if ( present(difftime) ) then
+          hst % time_bnds(1:1) = &
+            & EvalByUnit( difftime, '', hst % unlimited_units_symbol )
+        elseif ( present(timed) ) then
+          hst % time_bnds(1:1) = timed
+        else
+          hst % time_bnds(1:1) = time
+        end if
+
+      end if
+    end if
+
+#ifdef LIB_MPI
+    end if
+#endif
+                    })}
+
+    !-----------------------------------------------------------------
+    !  メッセージ出力
+    !  Output messages
+    !-----------------------------------------------------------------
+#ifdef LIB_MPI
+    if ( .not. hst % mpi_gather &
+      &  .or. ( hst % mpi_gather    .and. &
+      &         hst % mpi_myrank == 0 .and. &
+      &         hst % mpi_fileinfo % already_output ) ) then
+#endif
+
+    if ( present_and_false(quiet) ) then
+      call Inquire( hst % dimvars(1), & ! (in)
+        & url = url )                   ! (out)
+      call UrlSplit( fullname = url, &  ! (in)
+        & file = file )                 ! (out)
+
+      if ( hst % unlimited_index < 1 ) then
+        time_str = ''
+      else
+        timevar = hst % dimvars(hst % unlimited_index)
+        call Slice( timevar, &                     ! (in)
+          & 1, start = hst % count(v_ord), count = 1 ) ! (in)
+        call Get( timevar, & ! (inout)
+          & time_value, &    ! (out)
+          & 1, &             ! (in)
+          & err )            ! (out)
+        time_str = '(time=' // trim( toChar( time_value(1) )) // ')'
+      end if
+
+      call MessageNotify('M', 'HistoryPut', &
+        & '"%a" => "%a" %a %a', &
+        & ca = StoA( varname, file, time_str, avr_msg ) )
+
+    end if
+
+#ifdef LIB_MPI
+    end if
+#endif
+
+    !-----------------------------------------------------------------
+    !  終了処理, 例外処理
+    !  Termination and Exception handling
+    !-----------------------------------------------------------------
+999 continue
+    call StoreError( stat, subname, err, cause_c )
+    call EndSub(subname)
+  end subroutine HistoryPut#{type}Ex
+
+__EndOfFortran90Code__
+}
+
+types = ["Real", "Double", "Int"]
+types.each{ |type|
+print <<"__EndOfFortran90Code__"
+
+  subroutine HistoryPutAxisMPI#{type}( varname, array, &
+    & history, err )
+    !
+    ! MPI 使用時に, 各々のノード上のデータを単一ファイルに
+    ! 集約して出力する場合には,
+    ! このサブルーチンに領域全体の座標データを与えてください.
+    ! また, HistoryCreate のオプショナル論理型引数 *flag_mpi_gather*
+    ! に .true. を与えてください.
+    !
+    ! HistoryPut よりも後に使用してください
+    ! HistoryAddVariable, HistoryAddAttr よりも前に使用してください.
+    !
+    ! When MPI is used, if data on each node is integrated and
+    ! output to one file, give data of axes in whole area to
+    ! this subroutine.
+    ! And give .true. to optional logical argument *flag_mpi_gather*
+    ! in "HistoryCreate".
+    !
+    ! Use this subroutine after "HistoryPut", and
+    ! before "HistoryAddVariable", "HistoryAddAttr".
+    !
+    use gtool_history_generic, only: HistoryAxisInquire
+    use gtdata_generic, only: Create, Put_Attr, Put
+    use gtdata_types, only: GT_VARIABLE
+    use dc_error, only: StoreError, DC_NOERR, DC_ENOTINIT, &
+      & GT_EBADDIMNAME
+    use dc_url, only: UrlMerge
+    use dc_date_generic, only: EvalByUnit
+    use dc_date_types, only: DC_DIFFTIME
+    use dc_string, only: toChar, LChar, StrHead
+    use dc_message, only: MessageNotify
+    use gtool_history_types, only: GT_HISTORY, GT_HISTORY_AXIS, GT_HISTORY_VARINFO, GT_HISTORY_ATTR
+    use gtool_history_internal, only: default
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    use dc_types, only: STRING, TOKEN, DP
+    implicit none
+    character(*), intent(in):: varname
+                    #{ifelse(type, "Double", %Q{
+                              ! 座標変数の名称.
+                              !
+                              ! ここで指定するものは, HistoryCreate の
+                              ! 引数 *dims* で既に指定されてい
+                              ! なければなりません.
+                              !
+                              ! Name of dimensional variable.
+                              !
+                              ! This name must be specified by
+                              ! an argument *dims* in "HistoryCreate".
+                              !
+                    })}
+    #{$type_intent_in[type]}, intent(in):: array(:)
+                    #{ifelse(type, "Double", %Q{
+                              ! 座標データ.
+                              !
+                              ! Data of axes.
+                    })}
+    type(GT_HISTORY), intent(inout), optional, target:: history
+                    #{ifelse(type, "Double", %Q{
+                              ! 出力ファイルの設定に関する情報を
+                              ! 格納した GT_HISTORY 型変数
+                              !
+                              ! ここに指定するものは,
+                              ! HistoryCreate によって初期設定
+                              ! されていなければなりません.
+                              !
+                              ! A "GT_HISTORY" type variable that
+                              ! stores information about configuration of
+                              ! an output file
+                              !
+                              ! This must be initialized by
+                              ! "HistoryCreate".
+                              !
+                    })}
+    logical, intent(out), optional:: err
+                    #{ifelse(type, "Double", %Q{
+                              ! 例外処理用フラグ.
+                              ! デフォルトでは, この手続き内でエラーが
+                              ! 生じた場合, プログラムは強制終了します.
+                              ! 引数 *err* が与えられる場合,
+                              ! プログラムは強制終了せず, 代わりに
+                              ! *err* に .true. が代入されます.
+                              !
+                              ! Exception handling flag.
+                              ! By default, when error occur in
+                              ! this procedure, the program aborts.
+                              ! If this *err* argument is given,
+                              ! .true. is substituted to *err* and
+                              ! the program does not abort.
+                    })}
+#ifdef LIB_MPI
+    type(GT_HISTORY), pointer:: hst =>null()
+    integer:: dimord, dimsize, numdims, i, j, attr_size
+    type(GT_HISTORY_ATTR), pointer:: attrs(:) =>null()
+    type(GT_VARIABLE):: dimvar
+    character(STRING):: dimname
+    character(STRING):: name, longname, units, xtype, origin_str, url
+    real(DP):: origin_work
+#endif
+    integer:: stat
+    character(STRING):: cause_c
+    character(*), parameter:: subname = "HistoryPutAxisMPI#{type}"
+  continue
+    call BeginSub(subname, 'varname=%c', c1 = trim(varname) )
+    stat = DC_NOERR
+    cause_c = ""
+
+#ifndef LIB_MPI
+    call DbgMessage('This library is not built with MPI library')
+    goto 999
+#else
+    if (present(history)) then
+      hst => history
+    else
+      hst => default
+    endif
+
+    if ( .not. hst % initialized ) then
+      stat = DC_ENOTINIT
+      cause_c = 'GT_HISTORY'
+      goto 999
+    end if
+
+    call DbgMessage( 'mpi_gather=<%b>', l = (/ hst % mpi_gather /) )
+    if ( .not. hst % mpi_gather ) then
+      goto 999
+    else
+      numdims = size( hst % dimvars )
+      dimord = -1
+      do i = 1, numdims
+        call HistoryAxisInquire( &
+          & hst % mpi_fileinfo % axes(i), & ! (in)
+          & name = dimname )                ! (out)
+        if ( trim(varname) == trim(dimname) ) then
+          dimord = i
+          exit
+        end if
+      end do
+      if ( dimord < 1 ) then
+        stat = GT_EBADDIMNAME
+        cause_c = varname
+        goto 999
+      end if
+
+      dimsize = size( array )
+      if ( associated( hst % mpi_dimdata_all( dimord ) % a_Axis ) ) then
+        deallocate( hst % mpi_dimdata_all( dimord ) % a_Axis )
+      end if
+      allocate( hst % mpi_dimdata_all( dimord ) % a_Axis(dimsize) )
+      hst % mpi_dimdata_all( dimord ) % a_Axis = array
+      hst % mpi_dimdata_all( dimord ) % length = dimsize
+    end if
+
+    ! 全ての (時刻以外の) 座標データが登録されたらファイル出力
+    ! Output file if data of all axes (excluding time) are registered
+    !
+    numdims = size( hst % dimvars )
+    do i = 1, numdims
+      if ( hst % unlimited_index == i ) cycle
+      if ( hst % time_nv_index == i ) cycle
+      if ( hst % mpi_dimdata_all( i ) % length < 1 ) goto 999
+    end do
+
+    if ( hst % mpi_myrank /= 0 ) goto 2000
+
+    if ( hst % mpi_fileinfo % already_output ) goto 999
+
+    do i = 1, numdims
+      call HistoryAxisInquire( hst % mpi_fileinfo % axes(i), & ! (in)
+        & name, dimsize, longname, units, xtype )              ! (out)
+
+      url = UrlMerge(file = hst % mpi_fileinfo % file, var = name)
+
+      ! 座標の長さを, このサブルーチンで取得したものに修正
+      ! Length of axes is modified to one that is gotten by this subroutine
+      !
+      if ( hst % unlimited_index /= i ) then
+        dimsize = hst % mpi_dimdata_all( i ) % length
+      end if
+
+      ! ファイル作成
+      ! Create file
+      !
+      call Create( &
+        & hst % dimvars(i), trim(url), &
+        & dimsize, xtype = xtype, &
+        & overwrite = hst % mpi_fileinfo % overwrite )
+
+      ! 属性の付加
+      ! Add attributes
+      !
+      call Put_Attr(hst % dimvars(i), '+Conventions', trim(hst % mpi_fileinfo % conventions ))
+      if ( hst % mpi_fileinfo % gtver_add ) then
+        call Put_Attr(hst % dimvars(i), '+gt_version', trim(hst % mpi_fileinfo % gt_version ))
+      endif
+      ! title, source, institution, history, long_name, units 属性の付加
+      call Put_Attr(hst % dimvars(i), '+title', hst % mpi_fileinfo % title)
+      call Put_Attr(hst % dimvars(i), '+source', hst % mpi_fileinfo % source)
+      call Put_Attr(hst % dimvars(i), '+institution', trim(hst % mpi_fileinfo % institution))
+      call Put_Attr(hst % dimvars(i), '+history', trim(hst % mpi_fileinfo % nc_history))
+      call Put_Attr(hst % dimvars(i), 'long_name', longname)
+      call Put_Attr(hst % dimvars(i), 'units', units)
+
+      origin_work = hst % origin
+!      origin_work = EvalByUnit( hst % origin, '', hst % unlimited_units_symbol )
+      origin_str = trim( toChar( origin_work ) ) // &
+        &          ' [' // trim( hst % unlimited_units ) // ']'
+
+      ! 座標データの出力
+      ! Output data of axes
+      !
+      if ( hst % unlimited_index /= i ) then
+        call Put(hst % dimvars(i), &
+          & hst % mpi_dimdata_all( i ) % a_Axis, dimsize )
+        hst % dim_value_written(i) = .true.
+      end if
+
+      ! 座標の属性の付加
+      ! Add attributes of axes
+      !
+      attrs => hst % mpi_dimdata_all(i) % attrs
+      if ( associated( attrs ) ) then
+        attr_size = size( attrs )
+        do j = 1, attr_size
+          if ( StrHead( 'char', trim(LChar(attrs(j)%attrtype))) ) then
+            call Put_Attr(hst % dimvars(i), &
+              & attrs(j) % attrname, trim( attrs(j) % Charvalue ) )
+
+          elseif ( StrHead( 'int', trim(LChar(attrs(j)%attrtype))) ) then
+            if ( attrs(j)%array ) then
+              call DbgMessage('Intarray(:) is selected.')
+              call Put_Attr(hst % dimvars(i), &
+                & attrs(j) % attrname, attrs(j) % Intarray )
+            else
+              call DbgMessage('Intvalue is selected')
+              call Put_Attr(hst % dimvars(i), &
+                & attrs(j) % attrname, (/attrs(j) % Intvalue/) )
+            endif
+
+          elseif ( StrHead( 'real', trim(LChar(attrs(j)%attrtype))) ) then
+            if ( attrs(j)%array ) then
+              call DbgMessage('Realarray(:) is selected.')
+              call Put_Attr(hst % dimvars(i), &
+                & attrs(j) % attrname, attrs(j) % Realarray )
+            else
+              call DbgMessage('Realvalue is selected')
+              call Put_Attr(hst % dimvars(i), &
+                & attrs(j) % attrname, (/attrs(j) % Realvalue/) )
+            endif
+
+          elseif ( StrHead( 'double', trim(LChar(attrs(j)%attrtype))) ) then
+            if ( attrs(j)%array ) then
+              call DbgMessage('Doublearray(:) is selected.')
+              call Put_Attr(hst % dimvars(i), &
+                & attrs(j) % attrname, attrs(j) % Doublearray )
+            else
+              call DbgMessage('Doublevalue is selected')
+              call Put_Attr(hst % dimvars(i), &
+                & attrs(j) % attrname, (/attrs(j) % Doublevalue/) )
+            endif
+
+          elseif ( StrHead( 'logical', trim(LChar(attrs(j)%attrtype))) ) then
+            call Put_Attr(hst % dimvars(i), &
+              & attrs(j) % attrname, attrs(j) % Logicalvalue )
+
+          else
+            call DbgMessage('attrtype=<%c>=<%c>is Invalid.'   , &
+              &      c1=trim(attrs(j)%attrtype)         , &
+              &      c2=trim(LChar(attrs(j)%attrtype))      )
+          endif
+
+        end do
+
+      end if
+
+    end do
+
+    if ( .not. hst % mpi_fileinfo % quiet ) then
+      call MessageNotify('M', subname, &
+        & '"%c" is created (origin=%c)', &
+        & c1 = trim( hst % mpi_fileinfo % file ), &
+        & c2 = trim( origin_str ) )
+    end if
+
+2000 continue
+
+    hst % mpi_fileinfo % already_output = .true.
+
+#endif
+
+    ! 終了処理, 例外処理
+    ! Termination and Exception handling
+    !
+999 continue
+    call StoreError( stat, subname, err, cause_c )
+    call EndSub(subname)
+  end subroutine HistoryPutAxisMPI#{type}
+
+__EndOfFortran90Code__
+}
+
+types = ["Double", "Real", "Int"]
+def ValueOrArray(num)
+  return "value" if num == 0
+  return "array"
+end
+def ArgsToPutEx(num)
+  return "(/value/), 1" if num == 0
+  return "pack(array, .true.), size(array)"
+end
+types.each{ |type|
+for num in 0..$histput_dim
+print <<"__EndOfFortran90Code__"
+
+  subroutine HistoryPut#{type}#{num}( varname, #{ValueOrArray(num)}, &
+    & history, range, time, quiet, &
+    & difftime, timed, time_average_store, err )
+    !
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+    !
+    !== データ出力
+    !
+    ! gtool4 データ内の変数へデータの出力を行います。
+    ! このサブルーチンを用いる前に、HistoryCreate
+    ! による初期設定が必要です。
+    !
+    ! *HistoryPut* は複数のサブルーチンの総称名です。*value* に
+    ! 変数 (整数型、単精度実数型、倍精度実数型、文字型) もしくは
+    ! 1 〜 #{$histput_dim} 次元の配列
+    ! (整数型、単精度実数型、倍精度実数型) を与えることが可能です。
+    ! 下記の同名のサブルーチンを参照ください。
+    ! ただし、多次元配列を与える際の引数キーワードには
+    ! *array* を用いてください。
+    !
+    ! HistoryPut を最初に呼んだ時、時間次元の変数は HistoryCreate の
+    ! origin の値に設定されます。
+    !
+    ! ある変数 varname に対して HistoryPut を複数回呼ぶと、
+    ! HistoryCreate の interval × HistoryPut を呼んだ回数、 の分だけ
+    ! 時間次元の変数の値が増やされます。
+    ! ただし、時間平均値を出力する場合は例外です。
+    ! 以下の時間平均に関する項目を参照ください。
+    !
+    ! これらの時間次元の変数の値を明示的に設定したい場合は
+    ! HistorySetTime を用いるか、HistoryPut 自身で時間次元の変数へ値
+    ! を出力してください。
+    !
+    ! * 時間平均について
+    !
+    !   時間平均については HistoryAddVariable を参照ください。
+    !
+                    })}})}
+    !
+    use gtool_history_types, only: GT_HISTORY
+    use dc_date_types, only: DC_DIFFTIME
+    use dc_types, only: STRING, TOKEN, DP
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    implicit none
+    character(*), intent(in):: varname
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              ! 変数の名前
+                              !
+                              ! ただし、ここで指定するもの
+                              ! は、 HistoryCreateの *dims*
+                              ! または HistoryAddVariable や
+                              ! HistoryCopyVariable の
+                              ! *varname* で既に指定されてい
+                              ! なければなりません。
+                              !
+                    })}})}
+    #{$type_intent_in[type]}, intent(in):: #{ValueOrArray(num)}#{array_colon("#{num}")}
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              ! 変数が出力するデータ
+                              !
+                              ! 型は単精度実数型でも
+                              ! 倍精度実数型でもよいですが、
+                              ! HistoryAddVariable の
+                              ! *xtype* で指定した
+                              ! データ型と異なる
+                              ! 型を渡した場合、xtype で
+                              ! 指定した型に変換されます。
+                              !
+                    })}})}
+    type(GT_HISTORY), intent(inout), optional, target:: history
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              ! 出力ファイルの設定に関する情報を
+                              ! 格納した構造体
+                              !
+                              ! ここに指定するものは、
+                              ! HistoryCreate によって初期設定
+                              ! されていなければなりません。
+                              !
+                    })}})}
+    character(*), intent(in), optional:: range
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              ! gtool4 のコンマ記法による
+                              ! データの出力範囲指定
+                              !
+                              ! このオプションを用いる
+                              ! 際には、必ず *HistorySetTime*
+                              ! によって明示的に時刻の設定
+                              ! を行ってください。
+                              ! また、*HistoryGet* と異なり、
+                              ! 時刻に関する範囲指定は
+                              ! 行なえません。
+                              !
+                              ! 書式に関する詳細は
+                              ! {gtool4 netCDF 規約}[link:../xref.htm#label-6]
+                              ! の「5.4 コンマ記法」を参照して
+                              ! ください。
+                    })}})}
+    real, intent(in), optional:: time
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              !
+                              ! 時刻. (単精度実数型)
+                              !
+                              ! この引数を与える場合,
+                              ! 出力するかどうかをプログラムが
+                              ! 自動的に判断します.
+                              ! *time* に与えられた数値が
+                              ! HistoryCreate に与えた *interval*
+                              ! で割り切れる場合には出力が行われます.
+                              !
+                              ! HistoryAddVariable で
+                              ! *time_average* (または *average*)
+                              ! に .true. を与えた場合には,
+                              ! *time*, *difftime*
+                              ! のどちらの引数も与えない場合に,
+                              ! プログラムはエラーを発生させます.
+                              !
+                              ! この引数と *difftime*, *time_average_store*
+                              ! が同時に与えられた場合,
+                              ! *time_average_store* が優先されます.
+                              !
+                              ! また, この引数と *range* は併用できません.
+                              ! 併用した場合には,
+                              ! プログラムはエラーを発生させます.
+                              !
+                    })}})}
+    logical, intent(in), optional:: quiet
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              ! .true. を与えた場合,
+                              ! メッセージ出力が抑制されます.
+                              !
+                              ! If ".true." is given,
+                              ! messages are suppressed.
+                              !
+                    })}})}
+    type(DC_DIFFTIME), intent(in), optional:: difftime
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              !
+                              ! 時刻 (dc_date_types#DC_DIFFTIME 型)
+                              !
+                              ! 効果は *time* と同様です.
+                    })}})}
+    real(DP), intent(in), optional:: timed
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              !
+                              ! 時刻 (倍精度実数型)
+                              !
+                              ! 効果は *time* と同様です.
+                    })}})}
+    logical, intent(in), optional:: time_average_store
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              !
+                              ! 平均値の出力フラグ.
+                              ! この値に .true. を与えた場合には,
+                              ! 出力せずに与えられた値を一旦蓄えます.
+                              ! .false. を与えた場合には,
+                              ! *time* もしくは *difftime* と
+                              ! HistoryCreate に与えた *interval* に
+                              ! 関わらず出力を行います.
+                              !
+                              ! HistoryAddVariable で
+                              ! *time_average* (または *average*)
+                              ! に .true. を与えない場合は無効です.
+                              !
+                              ! *time* と *difftime*
+                              ! のどちらかを同時に与える必要があります.
+                              !
+                    })}})}
+    logical, intent(out), optional:: err
+                    #{ifelse(num, 0, %Q{
+                    #{ifelse(type, "Double", %Q{
+                              ! 例外処理用フラグ.
+                              ! デフォルトでは, この手続き内でエラーが
+                              ! 生じた場合, プログラムは強制終了します.
+                              ! 引数 *err* が与えられる場合,
+                              ! プログラムは強制終了せず, 代わりに
+                              ! *err* に .true. が代入されます.
+                              !
+                              ! Exception handling flag.
+                              ! By default, when error occur in
+                              ! this procedure, the program aborts.
+                              ! If this *err* argument is given,
+                              ! .true. is substituted to *err* and
+                              ! the program does not abort.
+                    })}})}
+
+    interface HistoryPut#{type}Ex
+      subroutine HistoryPut#{type}Ex( &
+        & varname, array, arraysize, history, range, &
+        & time, quiet, difftime, timed, time_average_store, err )
+        use gtool_history_types, only: GT_HISTORY
+        use dc_date_types, only: DC_DIFFTIME
+        use dc_types, only: DP
+        character(*), intent(in):: varname
+        integer, intent(in):: arraysize
+        #{$type_intent_in[type]}, intent(in):: array(arraysize)
+        type(GT_HISTORY), intent(inout), target, optional:: history
+        character(*), intent(in), optional:: range
+        real, intent(in), optional:: time
+        logical, intent(in), optional:: quiet
+        type(DC_DIFFTIME), intent(in), optional:: difftime
+        real(DP), intent(in), optional:: timed
+        logical, intent(in), optional:: time_average_store
+        logical, intent(out), optional:: err
+      end subroutine HistoryPut#{type}Ex
+    end interface
+
+    character(*), parameter:: subname = "HistoryPut#{type}#{num}"
+  continue
+    call BeginSub(subname)
+    call HistoryPut#{type}Ex( &
+      & varname, &               ! (in)
+      & #{ArgsToPutEx(num)}, &   ! (in)
+      & history = history, &     ! (inout) optional
+      & range = range, &         ! (in) optional
+      & time = time, &           ! (in) optional
+      & quiet = quiet, &         ! (in) optional
+      & difftime = difftime, &   ! (in) optional
+      & timed = timed, &         ! (in) optional
+      & time_average_store = &
+      &    time_average_store, & ! (in) optional
+      & err = err )              ! (out) optional
+    call EndSub(subname)
+  end subroutine
+
+__EndOfFortran90Code__
+end
+}
+undef ValueOrArray
+undef ArgsToPutEx
+
+print <<"__EndOfFortran90Code__"
+
+  subroutine HistoryPutChar0( varname, value, &
+    & history, range, time, quiet, &
+    & difftime, timed, time_average_store, err )
+    !
+    !
+    use gtool_history_types, only: GT_HISTORY
+    use dc_date_types, only: DC_DIFFTIME
+    use dc_types, only: STRING, TOKEN, DP
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    implicit none
+    character(*), intent(in):: varname
+    character(*), intent(in):: value
+    type(GT_HISTORY), intent(inout), optional, target:: history
+    character(*), intent(in), optional:: range
+    real, intent(in), optional:: time
+    logical, intent(in), optional:: quiet
+    type(DC_DIFFTIME), intent(in), optional:: difftime
+    real(DP), intent(in), optional:: timed
+    logical, intent(in), optional:: time_average_store
+    logical, intent(out), optional:: err
+
+    interface HistoryPutCharEx
+      subroutine HistoryPutCharEx( &
+        & varname, array, arraysize, history, range, &
+        & time, quiet, difftime, timed, time_average_store, err )
+        use gtool_history_types, only: GT_HISTORY
+        use dc_date_types, only: DC_DIFFTIME
+        use dc_types, only: DP
+        character(*), intent(in):: varname
+        integer, intent(in):: arraysize
+        character(*), intent(in):: array(arraysize)
+        type(GT_HISTORY), intent(inout), target, optional:: history
+        character(*), intent(in), optional:: range
+        real, intent(in), optional:: time
+        logical, intent(in), optional:: quiet
+        type(DC_DIFFTIME), intent(in), optional:: difftime
+        real(DP), intent(in), optional:: timed
+        logical, intent(in), optional:: time_average_store
+        logical, intent(out), optional:: err
+      end subroutine HistoryPutCharEx
+    end interface
+
+    character(*), parameter:: subname = "HistoryPutChar0"
+  continue
+    call BeginSub(subname)
+    call HistoryPutCharEx( &
+      & varname, &               ! (in)
+      & (/value/), 1, &   ! (in)
+      & history = history, &     ! (inout) optional
+      & range = range, &         ! (in) optional
+      & time = time, &           ! (in) optional
+      & quiet = quiet, &         ! (in) optional
+      & difftime = difftime, &   ! (in) optional
+      & timed = timed, &         ! (in) optional
+      & time_average_store = &
+      &    time_average_store, & ! (in) optional
+      & err = err )              ! (out) optional
+    call EndSub(subname)
+  end subroutine
+
+__EndOfFortran90Code__
+
+
+print <<"__EndOfFortran90Code__"
+
+  subroutine TimeGoAhead( varname, var, head, history, err )
+    !
+    ! *history* 内の (省略された場合は gtool_history 内に内包
+    ! される GT_HISTORY 変数) の変数名 *varname* の時間を1つ分
+    ! 進め、その最新の時間断面で切り取った変数 ID を *var* に返します。
+    !
+    !--
+    ! そのデフォルトでは変数ごとにカウンタを設置し、呼んだ数だけ
+    ! 「時刻」方向を進め、時刻データを入力する。
+    ! これに対し、HistorySetTime で時刻の変数に一度でもスカラ値を投入
+    ! すると、明示的にそれを設定したときにだけ時刻が進むようになる。
+    ! このルーチンでは後退はできない。
+    !
+    ! [詳細]
+    ! 変数名 varname に対応する変数 ID var を探査し、その変数が
+    ! 時間次元に依存する場合には hst % count の値を1つ増やす (時間を進める)。
+    ! そして、hst % origin と hst % interval から時間次元データに値を与える。
+    !
+    ! なお、HistorySetTime で既に値が設定され、hst % count の値が
+    ! 増やされる場合には、こちらでは hst % count の値を変更しない。
+    ! データも入力しない。
+    !++
+
+    use gtool_history_types, only: GT_HISTORY
+    use gtool_history_internal, only: default, lookup_variable, lookup_dimension
+    use gtdata_generic, only: Slice, Get_Slice, Put, Get, Get_Attr
+    use gtdata_types, only: GT_VARIABLE
+    use dc_types, only: STRING, DP
+    use dc_error, only: StoreError, NF90_ENOTVAR, DC_NOERR
+    use dc_date_generic, only: EvalByUnit, operator(+), operator(*), &
+      & DCDiffTimeCreate, min, max, EvalSec, DCDiffTimePutLine
+    use dc_date_types, only: DC_DIFFTIME
+    use dc_trace, only: BeginSub, EndSub, DbgMessage
+    implicit none
+    character(len = *), intent(in)            :: varname
+    type(GT_VARIABLE),  intent(out)           :: var
+    real, intent(in):: head
+    type(GT_HISTORY), intent(inout), optional, target:: history
+    logical,            intent(out), optional :: err
+    !
+    type(GT_HISTORY), pointer:: hst =>null()
+    type(GT_VARIABLE)        :: timevar
+    real, pointer:: time(:) =>null()
+    integer:: v_ord ! varname の history における次元添字番号
+    integer:: d_ord
+    integer:: timestart, rest
+    integer:: stat
+    logical:: get_err
+    real(DP):: curtime
+!    type(DC_DIFFTIME):: headdiff
+    character(STRING):: cause_c, subname_r
+    character(*), parameter:: subname = "TimeGoAhead"
+  continue
+    call BeginSub(subname, 'varname=%c head=%r', &
+      & c1=trim(varname), r=(/head/))
+    stat = DC_NOERR
+    cause_c = ''
+    subname_r = subname
+    if (present(history)) then
+      hst => history
+    else
+      hst => default
+    endif
+    ! hst 内での変数 varname の変数 ID を var に、
+    ! hst における変数添字を v_ord に取得
+    var = lookup_variable( hst, varname, & ! (in)
+      &                    ord = v_ord )   ! (out)
+    if (v_ord == 0) goto 1000
+    ! 変数 v_ord に時間次元が無い場合は終了
+    if (hst % growable_indices(v_ord) == 0) then
+      goto 999
+    endif
+    if (hst % dim_value_written(hst % unlimited_index)) then
+      !-----------------------
+      ! HistorySetTime を利用する場合
+      !
+      ! 時間次元に既に値が書き込まれている場合は count を増やさない
+      !
+      call Slice(var, hst % growable_indices(v_ord), & ! (in)
+        & start=hst % count(1), count=1)               ! (in)
+    else
+      !-----------------------
+      ! HistorySetTime を利用しない場合
+      !
+      ! 時間次元に値が書き込まれていない場合, count を増やす
+      ! (history % interval を利用する)
+      !
+      hst % count(v_ord) = hst % count(v_ord) + 1
+      call Slice(var, hst % growable_indices(v_ord), & ! (in)
+        & start=hst % count(v_ord), count=1)           ! (in)
+
+      !-----------------------
+      ! 時間次元変数へのデータ出力
+      !
+      ! 変数の count と時間次元変数の count を比較し,
+      ! 変数の count が大きい場合, 時間次元変数の count も
+      ! 同値になるようデータを出力する.
+      !
+      timevar = hst % dimvars(hst % unlimited_index)
+      call Get_Slice(timevar, 1, start=timestart)
+      call DbgMessage('map(timevar)start is <%d>. map(%c)start is <%d>', &
+        &       i=(/timestart, hst % count(v_ord)/), &
+        &       c1=trim(varname) )
+
+      call Get(timevar, time, get_err)
+      call DbgMessage('time(%d)=<%*r>, err=<%b>',      &
+        &       i=(/size(time)/), r=(/time(:)/), &
+        &       l=(/get_err/), n=(/size(time)/)         )
+
+      if (get_err .or. hst % count(v_ord) == 1 .and. timestart == 1) then
+        !---------------------
+        ! 時間次元のデータの初期値作成
+        !
+        ! 時間次元のデータがまだ作成されていない場合、
+        ! 初期値となるデータを作成
+        call Slice(timevar, 1, start=1, count=1)
+        curtime = hst % origin
+!        curtime = EvalByUnit( hst % origin, '', hst % unlimited_units_symbol )
+        call Put(timevar, (/curtime/), 1) ! (in)
+
+      elseif (hst % count(v_ord) > timestart) then
+        !---------------------
+        ! 時間次元のデータの初期値以外を作成
+        !
+        ! 変数の count が時間次元の start より大きい場合、
+        ! hst % interval でその間を埋める。
+        rest = timestart + 1
+        do
+          call Slice(timevar, 1, start=rest, count=1)
+          curtime = hst % origin + hst % interval * (rest - 1)
+!!$          curtime = EvalByUnit( &
+!!$            & hst % origin + hst % interval * (rest - 1), &
+!!$            & '', hst % unlimited_units_symbol )
+          call Put(timevar, (/curtime/), 1 ) ! (in)
+          rest = rest + 1
+          if ( rest > hst % count(v_ord) ) exit
+        enddo
+      endif
+      deallocate(time)
+    endif
+    goto 999
+
+1000 continue
+
+    !-----------------------------------------------------------------
+    !  hst 内に次元以外の変数 ID が見つからない場合
+    !-----------------------------------------------------------------
+    !
+    ! 次元 ID を探査
+    var = lookup_dimension(hst, varname, ord=d_ord)
+    !-------------------------
+    !  次元も含めた変数の中に varname が無い場合は stat に
+    !  NF90_ENOTVAR (Variable not Found) を返す.
+    !  (上のサブルーチンが停止させることを想定)
+    if (d_ord == 0) then
+      subname_r = 'HistoryPut'
+      stat = NF90_ENOTVAR
+      cause_c = 'varname="' // trim(varname) // '" is not found'
+      goto 999
+    endif
+    hst % dim_value_written(d_ord) = .TRUE.
+    if (d_ord /= hst % unlimited_index) then
+      goto 999
+    endif
+
+    !-------------------------
+    ! ややトリッキーだが、count の2番目以降の要素にも時刻を入れて
+    ! おくことで、HistorySetTime による巻き戻し後にも値を保持する。
+    hst % count(:) = maxval(hst % count(:)) + 1
+!!$    call DCDiffTimeCreate( headdiff, &           ! (out)
+!!$      & head, '', hst % unlimited_units_symbol ) ! (in)
+    hst % newest = max(hst % newest, head)
+    hst % oldest = min(hst % oldest, head)
+    call Slice(var, 1, start=hst % count(1), count=1)
+
+999 continue
+    call StoreError(stat, trim(subname_r), err, cause_c)
+    call EndSub(subname)
+  end subroutine TimeGoAhead
+
+__EndOfFortran90Code__
+
+
+print <<"__EndOfFooter__"
+!--
+! vi:set readonly sw=4 ts=8:
+!
+#{rb2f90_emacs_readonly}!
+!++
+__EndOfFooter__

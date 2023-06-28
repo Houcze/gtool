@@ -1,0 +1,89 @@
+#
+#       MkInclude for nmake
+#
+#       Copyright (C) 2004 GFD Dennou Club. All rights reserved.
+#
+
+FC    = ifort.exe /fpp /MT /nologo
+FCVER = 111
+CC    = cl.exe /MT
+CCVER = 80
+FTOL  = FTOL
+MODDIR= $(DIRDEPTH)/src/Module
+RM    = del /Q
+CP    = xcopy /D
+MV    = move
+MD    = mkdir
+
+GTOOL_DIR = C:\UTY\Gtool5
+
+SYSDEPABORT = abort
+SYSDEPARG   = nostd
+SYSDEPENV   = nostd
+
+all: build
+
+subdirs: $(SUBDIRS_PRETARGET) $(SUBDIRS) $(SUBDIRS_POSTTARGET)
+!if "$(SUBDIRS)" != ""
+$(SUBDIRS):subdirs.mak.force-build
+    @cd $@
+    @echo Entering $@
+#    @echo $(MAKE) /NOLOGO /S /$(MAKEFLAGS) /f Makefile.win subdirs
+    @$(MAKE) /NOLOGO /S /$(MAKEFLAGS) /f Makefile.win subdirs
+    @cd ..
+    @echo Leaving $@
+subdirs.mak.force-build: 
+!endif
+
+build: 
+    @$(MAKE) /$(MAKEFLAGS) /NOLOGO /S /f Makefile.win subdirs \
+            SUBDIRS_POSTTARGET=build-exec
+build-exec: $(OBJS)
+
+make-libs:
+    lib /out:gtool5.lib *.obj
+
+
+install: make-libs
+    @if not exist  $(GTOOL_DIR) $(MD) $(GTOOL_DIR)\lib\Module
+    @$(CP) $(MODDIR:/=\)\*.mod $(GTOOL_DIR)\lib\module
+    @if exist *.lib $(CP) *.lib $(GTOOL_DIR)\lib
+
+clean:
+    @$(MAKE) /$(MAKEFLAGS) /NOLOGO /S /f Makefile.win subdirs \
+            SUBDIRS_POSTTARGET=clean-exec
+
+clean-exec:
+    @echo Cleaning $@
+    if exist *.mod $(RM) *.mod
+    if exist *.obj $(RM) *.obj
+    if exist *.lib $(RM) *.lib
+    if exist *.bak $(RM) *.bak
+
+.SUFFIX: .obj .f90
+
+.f90.obj:
+    @if "$(<D)" NEQ "." @echo Entering $(*D:/=\)
+    @cd $(<D:/=\)
+    @if "$(<D)" NEQ "." @$(MAKE) /NOLOGO /S /$(MAKEFLAGS) /f makefile.win $(<B).obj
+    @if "$(<D)" NEQ "." @echo Leaving $(<D)
+    @cd $(MAKEDIR)
+    @if not exist $(MODPATHFLAG)$(MODDIR) @$(MD) $(MODPATHFLAG)$(MODDIR)
+    @if "$(<D)" EQU "." @$(FC) -c $(*B).f90 /module:$(MODPATHFLAG)$(MODDIR)
+#    @if "$(<D)" EQU "." echo $(CP) *.mod $(MODDIR:/=\)
+#    @if "$(<D)" EQU "." echo $(CP) *.obj $(DIRDEPTH)
+    @if exist *.mod @$(CP) *.mod $(MODDIR:/=\)
+    @if exist *.obj @$(CP) *.obj ..
+
+.f90.mod:
+    @if "$(<D)" NEQ "." @echo Entering $(*D:/=\)
+    @cd $(<D:/=\)
+    @if "$(<D)" NEQ "." @$(MAKE) /NOLOGO /S /$(MAKEFLAGS) /f makefile.win $(<B).obj
+    @if "$(<D)" NEQ "." @echo Leaving $(<D)
+    @cd $(MAKEDIR)
+    @if not exist $(MODPATHFLAG)$(MODDIR) @$(MD) $(MODPATHFLAG)$(MODDIR)
+    @if "$(<D)" EQU "." @$(FC) -c $(*B).f90 /module:$(MODPATHFLAG)$(MODDIR)
+#    @if "$(<D)" EQU "." echo $(CP) *.mod $(MODDIR:/=\)
+#    @if "$(<D)" EQU "." echo $(CP) *.obj $(DIRDEPTH)
+    @if exist *.mod @$(CP) *.mod $(MODDIR:/=\)
+    @if exist *.obj @$(CP) *.obj ..

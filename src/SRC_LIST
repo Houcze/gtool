@@ -1,0 +1,104 @@
+= Fortran 90/95 ソースコードファイルリスト
+
+= List of Fortran 90/95 source code files
+ 
+Note that Japanese and English are described in parallel. 
+
+src ディレクトリは以下のファイル, ディレクトリから構成されています. 
+
+  SRC_LIST     :: 本ファイル
+  Makefile     :: 以下の各ディレクトリの Makefile を呼び出すための Makefile
+
+  generic_names.rdoc:: 構造型と総称名との対応表
+  hspack.rdoc::        gtool_history F77 インターフェース HSPACKの解説文書
+
+  dc_utils/ :: 文字列処理や日時の計算など
+               Fortran 90/95 数値モデル一般に使用可能な機能の提供
+  netcdf/   :: NetCDF ライブラリ F77 インターフェース
+  sysdep/   :: 処理系依存事項のラッパー
+
+  gtool/               :: 入出力インターフェース関連
+  |-- gtool5.f90       :: gtool5 ライブラリの全機能を提供
+  |-- gt4f90io.f90     :: 同上 (後方互換用)
+  |-- gtool_history/
+  |   |-- gtool_history.f90   :: 基本入出力インターフェース
+  |   `-- gt4_history.f90     :: 同上 (後方互換用)
+  |
+  |-- gtool_historyauto/          
+  |   `-- gtool_historyauto.f90     :: NAMELIST による出力間隔等の
+  |                                    変更が可能な出力インターフェース
+  |
+  `-- gtool_history_nmlinfo/        
+      `-- gtool_history_nmlinfo.f90 :: 出力間隔等の情報管理ライブラリ
+
+  gtdata/   :: 多次元数値データアクセスライブラリ
+  |-- gtdata_generic.f90             :: 各種のデータ形式を抽象化した
+  |-- gtdata_types.f90                  多次元数値データアクセスライブラリ
+  |-- gtdata_internal_map.f90
+  |-- gtdata_internal_vartable.f90
+  |
+  |-- gtdata_netcdf/                 :: NetCDF ファイルのアクセスライブラリ
+  |   |-- gtdata_netcdf_generic.f90
+  |   |-- gtdata_netcdf_types.f90
+  |   |-- gtdata_netcdf_internal.f90
+  |   |
+  |   `-- gtdata_netcdf_file/        :: 下位アクセスライブラリ
+  |       |-- gtdata_netcdf_file_generic.f90
+  |       |-- gtdata_netcdf_file_types.f90
+  |       `-- gtdata_netcdf_file_internal.f90
+  |
+  `-- gtdata_memory/                 :: メモリ変数のデータアクセスライブラリ
+      |-- gtdata_memory_generic.f90
+      |-- gtdata_memory_types.f90
+      `-- gtdata_memory_internal.f90
+
+"src" directory is consist of following files and directories.
+
+  SRC_LIST     :: This file
+  Makefile     :: This Makefile calls Makefiles under following directories
+
+  generic_names.rdoc:: Table of derived types and generic names
+  hspack.rdoc::        Documents of HSPACK (gtool_history F77 interface) 
+
+  dc_utils/ :: These modules provides features for common Fortran 90/95
+               numerical models (ex. string manipulation, date and time
+               handling)
+  netcdf/   :: F77 interface of netCDF library
+  sysdep/   :: Wrapper of implementation-dependent items
+
+  gtool/               :: Input/Output interface, etc.
+  |-- gtool5.f90       :: This provides all features of gtool5 library
+  |-- gt4f90io.f90     :: Ditto (for backward compatibility)
+  |-- gtool_history/
+  |   |-- gtool_history.f90   :: Basic Input/Output interface
+  |   `-- gt4_history.f90     :: Ditto (for backward compatibility)
+  |
+  |-- gtool_historyauto/          
+  |   `-- gtool_historyauto.f90     :: Output interface with
+  |                                    a function that output interval, etc. are
+  |                                    able to be changed by NAMELIST
+  |
+  `-- gtool_history_nmlinfo/        
+      `-- gtool_history_nmlinfo.f90 :: Information about output interval, etc.
+                                       control library
+
+  gtdata/   :: Multi-dimensional numerical data access library
+  |-- gtdata_generic.f90              :: Multi-dimensional numerical data that are
+  |-- gtdata_types.f90                   abstracted from each data format access library
+  |-- gtdata_internal_map.f90
+  |-- gtdata_internal_vartable.f90
+  |
+  |-- gtdata_netcdf/                 :: NetCDF data access library
+  |   |-- gtdata_netcdf_generic.f90
+  |   |-- gtdata_netcdf_types.f90
+  |   |-- gtdata_netcdf_internal.f90
+  |   |
+  |   `-- gtdata_netcdf_file/        :: Lower access library
+  |       |-- gtdata_netcdf_file_generic.f90
+  |       |-- gtdata_netcdf_file_types.f90
+  |       `-- gtdata_netcdf_file_internal.f90
+  |
+  `-- gtdata_memory/                 :: Memory variable data access library
+      |-- gtdata_memory_generic.f90
+      |-- gtdata_memory_types.f90
+      `-- gtdata_memory_internal.f90
